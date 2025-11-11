@@ -1,7 +1,3 @@
-"""
-Configuration settings for the project.
-"""
-
 from pathlib import Path
 
 # Project root
@@ -13,6 +9,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 
 RAW_HEART_DATA = RAW_DATA_DIR / "heart_2022.csv"
+RAW_POPULATION_DATA = RAW_DATA_DIR / "POP_EST2022.csv"
 CLEANED_HEART_DATA = PROCESSED_DATA_DIR / "heart_cleaned.csv"
 CLUSTERED_DATA = PROCESSED_DATA_DIR / "heart_with_clusters.csv"
 

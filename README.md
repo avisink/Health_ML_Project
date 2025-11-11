@@ -30,8 +30,8 @@ streamlit run app/app.py
 
 ## 📝 TODO
 
-- [ ] Add data to `data/raw/`
-- [ ] Run cleaning pipeline
+- [x] Add data to `data/raw/`
+- [x] Run cleaning pipeline
 - [ ] Train models
 - [ ] Test Streamlit app
 - [ ] Create presentation
