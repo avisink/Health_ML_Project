@@ -841,8 +841,8 @@ with tab4:
 st.markdown("---")
 st.markdown(
     """
-    <div style='text-align: center; color: #666; padding: 20px;'>
-    <p><strong>📊 Data Source:</strong> CDC BRFSS 2022 Survey (246,022 respondents)</p>
+    <div style='text-align: left; color: #666; padding: 20px;'>
+    <p><strong>📊 Data Source:</strong> CDC BRFSS 2022 Survey (445,132 original respondents; 246,022 complete rows after cleaning)</p>
     <p><strong>⚠️ Disclaimer:</strong> For educational purposes only. Not medical advice. Always consult healthcare professionals for medical decisions.</p>
     <p style='font-size: 0.9em; margin-top: 10px;'>This dashboard compares your profile to similar individuals in the dataset to provide risk estimates.</p>
     </div>
