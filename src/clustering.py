@@ -1,21 +1,17 @@
 """
-CLUSTERING PIPELINE - Week 1 Days 3-5
-Goal: Discover 5 health personas for killer presentation visuals
+SIMPLIFIED CLUSTERING PIPELINE
 """
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler, RobustScaler, PowerTransformer
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans, AgglomerativeClustering
-from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
-from sklearn.feature_selection import VarianceThreshold
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 from pathlib import Path
 import sys
-import warnings
-warnings.filterwarnings('ignore')
+import joblib
 
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -26,562 +22,383 @@ from src.config import (
     SCALER, 
     FIGURES_DIR,
     MODELS_DIR,
-    RANDOM_STATE,
-    N_CLUSTERS
+    RANDOM_STATE
 )
 
 # ============================================================================
-# STEP 1: FEATURE SELECTION FOR CLUSTERING
+# STEP 1: SELECT FEATURES
 # ============================================================================
 
-def select_clustering_features(heart):
-    """
-    Choosing features that define health behavior/status profiles.
-    """
-    
-    # OPTION 1: Behavioral/Lifestyle Clusters 
-    behavioral_features = [
-        # Demographics
-        'AgeCategory',  # 0-12 range (well distributed)
-        # Note: Sex already encoded as binary during cleaning
-        # Lifestyle (highest impact modifiable factors)
-        'BMI',                    # Continuous, good spread
-        'SleepHours',             # Peaked at 7-8, there's quite the outliers but good variation
-        'PhysicalActivities',     # Binary: 78% yes, 22% no
-        'SmokerStatus',           # 0-3: 60% never, 28% former, 12% current
-        'AlcoholDrinkers',        # Binary: 55% yes, 45% no
-        
-        # Health engagement (shows healthcare access patterns)
-        'LastCheckupTime',        # 0-3: 81% within year
-        'FluVaxLast12',           # Binary: 53% yes
-        
-        # Self-reported health status
-        'GeneralHealth',          # 1-5: good spread, peaked at 3-4
-        'PhysicalHealthDays',     # 0-30: 62% report 0 days (right-skewed)
-        'MentalHealthDays'        # 0-30: 61% report 0 days (right-skewed)
-    ]
-    
-    # OPTION 2: We can add outcomes for disease-pattern clusters
-    # We want clusters defined BY disease co-occurrence
-    outcome_features = [
-        'HadDiabetes',            # 14% prevalence (use binary 0 or 3)
-        'HadHeartAttack',         # 5.5% prevalence
-        'HadDepressiveDisorder',  # 21% prevalence
-        'HadArthritis'            # 35% prevalence (age-related)
+def select_features():
+    """Pick features that make sense for health profiles."""
+    return [
+        'AgeCategory', 'BMI', 'SleepHours', 
+        'PhysicalActivities', 'SmokerStatus', 'AlcoholDrinkers',
+        'GeneralHealth', 'PhysicalHealthDays', 'MentalHealthDays',
+        'LastCheckupTime', 'FluVaxLast12',
+        # Add disease outcomes for richer profiles
+        'HadDiabetes', 'HadHeartAttack', 'HadDepressiveDisorder'
     ]
 
-    behavioral_features.extend(outcome_features)
-    
-    print(f"Selected {len(behavioral_features)} features for clustering")
-    return behavioral_features
-
 
 # ============================================================================
-# STEP 2: PREPARE DATA FOR CLUSTERING
+# STEP 2: PREPARE DATA
 # ============================================================================
 
-def prepare_clustering_data(heart, features, use_pca=True, pca_components=None, 
-                           handle_skew=True, use_robust_scaling=False):
-    """
-    Handle missing values, encode categorical variables, and apply transformations.
-    
-    Parameters:
-    - use_pca: Apply PCA for dimensionality reduction
-    - pca_components: Number of PCA components (None = auto-select to explain 95% variance)
-    - handle_skew: Apply power transform to skewed features
-    - use_robust_scaling: Use RobustScaler instead of StandardScaler (better for outliers)
-    """
+def prepare_data(heart, features):
+    """Clean and scale data. That's it."""
     
     df = heart[features].copy()
     
-    # One-hot encode 'Sex' if needed
-    if 'Sex' in df.columns:
-        df = pd.get_dummies(df, columns=['Sex'], drop_first=True)
-    
-    # Fill missing values
+    # Fill missing (shouldn't be many after cleaning)
     df = df.fillna(df.median())
     
-    # Handle skewed features (PhysicalHealthDays, MentalHealthDays)
-    skewed_features = ['PhysicalHealthDays', 'MentalHealthDays']
-    if handle_skew:
-        for feat in skewed_features:
-            if feat in df.columns:
-                # Apply Yeo-Johnson transformation (handles zeros and negatives)
-                power_transformer = PowerTransformer(method='yeo-johnson', standardize=False)
-                df[feat] = power_transformer.fit_transform(df[[feat]]).flatten()
+    # Scale everything
+    scaler = StandardScaler()
+    df_scaled = scaler.fit_transform(df)
     
-    # Remove low-variance features (likely not useful for clustering)
-    variance_selector = VarianceThreshold(threshold=0.01)
-    df_array = variance_selector.fit_transform(df)
-    selected_features = [df.columns[i] for i in variance_selector.get_support(indices=True)]
-    
-    # Scale features
-    if use_robust_scaling:
-        scaler = RobustScaler()  # Better for outliers
-    else:
-        scaler = StandardScaler()
-    
-    df_scaled = scaler.fit_transform(df_array)
-    
-    # Apply PCA if requested
-    pca = None
-    if use_pca:
-        if pca_components is None:
-            # Auto-select components to explain 95% variance
-            pca_temp = PCA()
-            pca_temp.fit(df_scaled)
-            cumsum_variance = np.cumsum(pca_temp.explained_variance_ratio_)
-            pca_components = np.argmax(cumsum_variance >= 0.95) + 1
-            pca_components = min(pca_components, df_scaled.shape[1] - 1)  # Don't exceed n_features-1
-        
-        pca = PCA(n_components=pca_components, random_state=RANDOM_STATE)
-        df_scaled = pca.fit_transform(df_scaled)
-        print(f"  Applied PCA: {df_scaled.shape[1]} components explain "
-              f"{pca.explained_variance_ratio_.sum():.1%} of variance")
-    
-    return df_scaled, selected_features, scaler, pca
+    print(f"✓ Prepared {df.shape[0]:,} samples × {df.shape[1]} features")
+    return df_scaled, df.columns.tolist(), scaler
 
 
 # ============================================================================
-# STEP 3: FIND OPTIMAL NUMBER OF CLUSTERS
+# STEP 3: FIND BEST K (Quick version)
 # ============================================================================
 
-def find_optimal_clusters(data, k_range=range(3, 8), try_multiple_algorithms=True):
-    """
-    Use multiple metrics and algorithms to find best clustering approach.
+def find_best_k(data, k_range=range(3, 9)):
+    """Test K=3 to 8, pick best silhouette score."""
     
-    Returns:
-    - optimal_k: Best number of clusters
-    - best_method: Best algorithm ('KMeans', 'Agglomerative')
-    - best_score: Best silhouette score achieved
-    """
+    print("\nTesting different K values...")
+    scores = []
     
-    results = []
-    
-    # Test KMeans
-    print("\nTesting KMeans:")
-    kmeans_scores = []
     for k in k_range:
-        kmeans = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=20, max_iter=500)
+        kmeans = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10)
         labels = kmeans.fit_predict(data)
-        sil_score = silhouette_score(data, labels)
-        ch_score = calinski_harabasz_score(data, labels)
-        db_score = davies_bouldin_score(data, labels)
-        kmeans_scores.append(sil_score)
-        results.append({
-            'method': 'KMeans',
-            'k': k,
-            'silhouette': sil_score,
-            'calinski_harabasz': ch_score,
-            'davies_bouldin': db_score
-        })
-        print(f"  K={k}: Silhouette={sil_score:.4f}, CH={ch_score:.1f}, DB={db_score:.4f}")
+        score = silhouette_score(data, labels)
+        scores.append(score)
+        print(f"  K={k}: Silhouette = {score:.3f}")
     
-    # Test Agglomerative Clustering
-    # Note: Agglomerative Clustering has O(n²) memory complexity
-    # Skip for large datasets (>50k samples) to avoid memory issues
-    MAX_SAMPLES_FOR_AGGLOMERATIVE = 50000
-    if try_multiple_algorithms and len(data) <= MAX_SAMPLES_FOR_AGGLOMERATIVE:
-        print("\nTesting Agglomerative Clustering:")
-        agglo_scores = []
-        for k in k_range:
-            agglo = AgglomerativeClustering(n_clusters=k)
-            labels = agglo.fit_predict(data)
-            sil_score = silhouette_score(data, labels)
-            ch_score = calinski_harabasz_score(data, labels)
-            db_score = davies_bouldin_score(data, labels)
-            agglo_scores.append(sil_score)
-            results.append({
-                'method': 'Agglomerative',
-                'k': k,
-                'silhouette': sil_score,
-                'calinski_harabasz': ch_score,
-                'davies_bouldin': db_score
-            })
-            print(f"  K={k}: Silhouette={sil_score:.4f}, CH={ch_score:.1f}, DB={db_score:.4f}")
-    elif try_multiple_algorithms and len(data) > MAX_SAMPLES_FOR_AGGLOMERATIVE:
-        print(f"\n⚠ Skipping Agglomerative Clustering: dataset too large ({len(data):,} samples)")
-        print(f"  Agglomerative Clustering requires O(n²) memory and would need ~{len(data)**2 * 8 / 1e9:.1f} GB")
-        print(f"  Using KMeans only (more memory-efficient for large datasets)")
-    
-    # Find best result
-    results_df = pd.DataFrame(results)
-    best_idx = results_df['silhouette'].idxmax()
-    best_result = results_df.loc[best_idx]
-    
-    optimal_k = int(best_result['k'])
-    best_method = best_result['method']
-    best_score = best_result['silhouette']
-    
-    print(f"\n{'='*60}")
-    print(f"✓ BEST RESULT: {best_method} with K={optimal_k}")
-    print(f"  Silhouette Score: {best_score:.4f}")
-    print(f"  Calinski-Harabasz: {best_result['calinski_harabasz']:.1f}")
-    print(f"  Davies-Bouldin: {best_result['davies_bouldin']:.4f}")
-    print(f"{'='*60}")
-    
-    # Plot comparison
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    
-    # Silhouette scores
-    ax1 = axes[0]
-    for method in results_df['method'].unique():
-        method_data = results_df[results_df['method'] == method]
-        ax1.plot(method_data['k'], method_data['silhouette'], 
-                marker='o', linewidth=2, label=method)
-    ax1.set_xlabel('Number of Clusters (K)')
-    ax1.set_ylabel('Silhouette Score')
-    ax1.set_title('Silhouette Score by Method')
-    ax1.legend()
-    ax1.grid(alpha=0.3)
-    ax1.axhline(y=best_score, color='r', linestyle='--', alpha=0.5, label=f'Best: {best_score:.4f}')
-    
-    # All metrics comparison
-    ax2 = axes[1]
-    kmeans_data = results_df[results_df['method'] == 'KMeans']
-    ax2_twin = ax2.twinx()
-    
-    ax2.plot(kmeans_data['k'], kmeans_data['silhouette'], 'o-', label='Silhouette', color='blue')
-    ax2_twin.plot(kmeans_data['k'], kmeans_data['calinski_harabasz'], 's-', 
-                  label='Calinski-Harabasz', color='green')
-    ax2.plot(kmeans_data['k'], kmeans_data['davies_bouldin'], '^-', 
-             label='Davies-Bouldin (lower is better)', color='red')
-    
-    ax2.set_xlabel('Number of Clusters (K)')
-    ax2.set_ylabel('Silhouette / Davies-Bouldin', color='black')
-    ax2_twin.set_ylabel('Calinski-Harabasz', color='green')
-    ax2.set_title('KMeans: All Metrics')
-    ax2.legend(loc='upper left')
-    ax2_twin.legend(loc='upper right')
-    ax2.grid(alpha=0.3)
-    
+    # Plot
+    plt.figure(figsize=(8, 5))
+    plt.plot(k_range, scores, 'o-', linewidth=2, markersize=8)
+    plt.xlabel('Number of Clusters (K)', fontsize=12)
+    plt.ylabel('Silhouette Score', fontsize=12)
+    plt.title('Finding Optimal K', fontsize=14, fontweight='bold')
+    plt.grid(alpha=0.3)
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / 'optimal_k.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()
     
-    return optimal_k, best_method, best_score
+    best_k = list(k_range)[np.argmax(scores)]
+    best_score = max(scores)
+    print(f"\n✓ Best K = {best_k} (Silhouette = {best_score:.3f})")
+    
+    return best_k, best_score
 
 
 # ============================================================================
-# STEP 4: TRAIN FINAL CLUSTERING MODEL
+# STEP 4: TRAIN FINAL MODEL
 # ============================================================================
 
-def train_clustering(data, k=5, method='KMeans'):
-    """
-    Train clustering model with specified algorithm.
+def train_model(data, k):
+    """Train KMeans with best K."""
     
-    Parameters:
-    - data: Preprocessed data
-    - k: Number of clusters
-    - method: 'KMeans' or 'Agglomerative'
-    """
+    print(f"\nTraining final model with K={k}...")
+    kmeans = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=20)
+    labels = kmeans.fit_predict(data)
     
-    if method == 'KMeans':
-        model = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=20, max_iter=500)
-        labels = model.fit_predict(data)
-    elif method == 'Agglomerative':
-        model = AgglomerativeClustering(n_clusters=k)
-        labels = model.fit_predict(data)
-    else:
-        raise ValueError(f"Unknown method: {method}")
+    # Show cluster sizes
+    print("\nCluster sizes:")
+    for i in range(k):
+        count = (labels == i).sum()
+        pct = count / len(labels) * 100
+        print(f"  Cluster {i}: {count:,} ({pct:.1f}%)")
     
-    # Calculate final metrics
-    sil_score = silhouette_score(data, labels)
-    ch_score = calinski_harabasz_score(data, labels)
-    db_score = davies_bouldin_score(data, labels)
-    
-    print(f"\nFinal Model: {method} with K={k}")
-    print(f"  Silhouette Score: {sil_score:.4f}")
-    print(f"  Calinski-Harabasz: {ch_score:.1f}")
-    print(f"  Davies-Bouldin: {db_score:.4f}")
-    
-    print(f"\nCluster sizes:")
-    unique, counts = np.unique(labels, return_counts=True)
-    for cluster, count in zip(unique, counts):
-        print(f"  Cluster {cluster}: {count:,} ({count/len(labels)*100:.1f}%)")
-    
-    return model, labels
+    return kmeans, labels
 
 
 # ============================================================================
-# STEP 5: PROFILE CLUSTERS (THE MONEY SHOT!)
+# STEP 5: PROFILE CLUSTERS
 # ============================================================================
 
-def profile_clusters(heart, labels, features):
-    """Generate human-readable cluster descriptions."""
+def profile_clusters(heart, labels):
+    """Calculate average stats for each cluster."""
     
-    heart_with_clusters = heart.copy()
-    heart_with_clusters['Cluster'] = labels
+    heart_clustered = heart.copy()
+    heart_clustered['Cluster'] = labels
     
     profiles = []
-    
-    for cluster_id in sorted(heart_with_clusters['Cluster'].unique()):
-        cluster_data = heart_with_clusters[heart_with_clusters['Cluster'] == cluster_id]
+    for i in sorted(np.unique(labels)):
+        cluster_data = heart_clustered[heart_clustered['Cluster'] == i]
+        
+        # Convert diabetes to binary for cleaner stats
+        diabetes_pct = (cluster_data['HadDiabetes'] == 3).mean() * 100
         
         profile = {
-            'Cluster': cluster_id,
+            'Cluster': i,
             'Size': len(cluster_data),
+            'Pct': len(cluster_data) / len(heart_clustered) * 100,
             'Avg_Age': cluster_data['AgeCategory'].mean(),
             'Avg_BMI': cluster_data['BMI'].mean(),
             'Avg_Sleep': cluster_data['SleepHours'].mean(),
-            'Pct_PhysActive': cluster_data['PhysicalActivities'].mean() * 100,
+            'Pct_Active': cluster_data['PhysicalActivities'].mean() * 100,
             'Pct_Smokers': (cluster_data['SmokerStatus'] >= 2).mean() * 100,
-            'Pct_Diabetes': cluster_data['HadDiabetes'].mean() * 100,
+            'Pct_Diabetes': diabetes_pct,
             'Pct_HeartAttack': cluster_data['HadHeartAttack'].mean() * 100,
             'Pct_Depression': cluster_data['HadDepressiveDisorder'].mean() * 100,
             'Avg_PhysHealthDays': cluster_data['PhysicalHealthDays'].mean(),
-            'Avg_MentHealthDays': cluster_data['MentalHealthDays'].mean()
+            'Avg_MentHealthDays': cluster_data['MentalHealthDays'].mean(),
         }
         profiles.append(profile)
     
     profile_df = pd.DataFrame(profiles)
-    print("\n" + "="*80)
+    
+    print("\n" + "="*100)
     print("CLUSTER PROFILES")
-    print("="*80)
-    print(profile_df.to_string(index=False))
+    print("="*100)
+    print(profile_df.round(1).to_string(index=False))
     
-    return profile_df, heart_with_clusters
+    return profile_df, heart_clustered
 
 
 # ============================================================================
-# STEP 6: NAME THE CLUSTERS (MAKE IT MEMORABLE!)
+# STEP 6: NAME CLUSTERS (Manual - customize after seeing results!)
 # ============================================================================
 
-def assign_cluster_names(profile_df):
+def name_clusters(profile_df):
     """
-    Manually assign catchy names based on profiles.
-    Adjust these after you see the data!
+    Give clusters catchy names based on their characteristics.
+    CUSTOMIZE THIS after you see your actual profiles!
     """
     
-    # Example naming logic (customize after seeing your results)
     names = {}
     
-    for idx, row in profile_df.iterrows():
-        cluster_id = int(row['Cluster'])
+    for _, row in profile_df.iterrows():
+        cid = int(row['Cluster'])
         
-        # Decision tree for naming
-        if row['Avg_Age'] < 4 and row['Pct_PhysActive'] > 70:
-            names[cluster_id] = "💪 Healthy Young Actives"
-        elif row['Pct_Smokers'] > 30:
-            names[cluster_id] = "🚬 Struggling Smokers"
+        # Simple naming logic - ADJUST BASED ON YOUR RESULTS
+        if row['Avg_Age'] < 4 and row['Pct_Active'] > 75:
+            names[cid] = "💪 Healthy Young Actives"
+        
+        elif row['Pct_Smokers'] > 25 and row['Avg_MentHealthDays'] > 5:
+            names[cid] = "🚬 Struggling Smokers"
+        
         elif row['Avg_Age'] > 8 and row['Pct_Diabetes'] > 20:
-            names[cluster_id] = "🧓 Aging with Challenges"
-        elif row['Pct_PhysActive'] < 50 and row['Avg_BMI'] > 28:
-            names[cluster_id] = "🛋️ Sedentary High-Risk"
+            names[cid] = "🧓 Aging with Challenges"
+        
+        elif row['Pct_Active'] < 60 and row['Avg_BMI'] > 28:
+            names[cid] = "🛋️ Sedentary High-Risk"
+        
+        elif row['Pct_Active'] > 75 and row['Avg_Age'] > 4:
+            names[cid] = "🏃 Active Middle-Agers"
+        
         else:
-            names[cluster_id] = f"📊 Cluster {cluster_id}"
+            # Fallback - describe key traits
+            age_label = "Young" if row['Avg_Age'] < 5 else "Middle" if row['Avg_Age'] < 9 else "Senior"
+            health_label = "Healthy" if row['Pct_Diabetes'] < 10 else "At-Risk"
+            names[cid] = f"📊 {age_label} {health_label}"
     
     profile_df['Name'] = profile_df['Cluster'].map(names)
+    
+    print("\n✓ Cluster names:")
+    for cid, name in names.items():
+        pct = profile_df[profile_df['Cluster'] == cid]['Pct'].values[0]
+        size = profile_df[profile_df['Cluster'] == cid]['Size'].values[0]
+        print(f"  {name} - {size:,} people ({pct:.1f}%)")
+    
     return profile_df, names
 
 
 # ============================================================================
-# STEP 7: VISUALIZATION - RADAR CHARTS
+# STEP 7: CREATE VISUALIZATIONS
 # ============================================================================
 
-def create_radar_chart(profile_df, cluster_names):
-    """Create radar chart for each cluster - PRESENTATION GOLD!"""
+def create_visualizations(profile_df):
+    """Make radar charts and other visuals."""
     
-    # Select key features for radar
-    features_for_radar = [
-        'Avg_BMI', 'Avg_Sleep', 'Pct_PhysActive', 
-        'Pct_Diabetes', 'Pct_Depression', 'Avg_PhysHealthDays'
-    ]
+    # 1. RADAR CHART (Presentation Gold!)
+    features_radar = ['Avg_BMI', 'Avg_Sleep', 'Pct_Active', 
+                      'Pct_Diabetes', 'Pct_Depression']
     
-    # Normalize to 0-1 scale for radar
-    radar_data = profile_df[features_for_radar].copy()
+    # Normalize to 0-1
+    radar_data = profile_df[features_radar].copy()
     for col in radar_data.columns:
-        min_val = radar_data[col].min()
-        max_val = radar_data[col].max()
-        radar_data[col] = (radar_data[col] - min_val) / (max_val - min_val)
+        min_val, max_val = radar_data[col].min(), radar_data[col].max()
+        if max_val > min_val:  # Avoid division by zero
+            radar_data[col] = (radar_data[col] - min_val) / (max_val - min_val)
+        else:
+            radar_data[col] = 0
     
-    # Create subplot for each cluster
+    # Plot
     n_clusters = len(profile_df)
-    fig, axes = plt.subplots(1, n_clusters, figsize=(5*n_clusters, 5), 
+    fig, axes = plt.subplots(1, n_clusters, figsize=(5*n_clusters, 5),
                              subplot_kw=dict(projection='polar'))
     
     if n_clusters == 1:
         axes = [axes]
     
-    categories = ['BMI', 'Sleep', 'Active%', 'Diabetes%', 'Depress%', 'PhysHealth']
-    angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
+    categories = ['BMI', 'Sleep', 'Active%', 'Diabetes%', 'Depression%']
+    angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False).tolist()
     angles += angles[:1]
     
     for idx, (ax, (_, row)) in enumerate(zip(axes, profile_df.iterrows())):
         values = radar_data.iloc[idx].tolist()
         values += values[:1]
         
-        ax.plot(angles, values, 'o-', linewidth=2, label=row['Name'])
+        ax.plot(angles, values, 'o-', linewidth=2)
         ax.fill(angles, values, alpha=0.25)
         ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories)
+        ax.set_xticklabels(categories, size=10)
         ax.set_ylim(0, 1)
         ax.set_title(f"{row['Name']}\n({row['Size']:,} people)", 
-                     fontsize=10, pad=20)
+                     size=11, pad=20, fontweight='bold')
         ax.grid(True)
     
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / 'cluster_radar_charts.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()
+    print(f"  ✓ Saved: cluster_radar_charts.png")
+    
+    
+    # 2. SIMPLE BAR CHART (Disease prevalence comparison)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    
+    conditions = [
+        ('Pct_Diabetes', 'Diabetes', axes[0]),
+        ('Pct_HeartAttack', 'Heart Attack', axes[1]),
+        ('Pct_Depression', 'Depression', axes[2])
+    ]
+    
+    for col, title, ax in conditions:
+        profile_df.plot(x='Name', y=col, kind='bar', ax=ax, 
+                       color='steelblue', legend=False)
+        ax.set_title(f'{title} Prevalence by Cluster', fontweight='bold')
+        ax.set_ylabel('Prevalence (%)')
+        ax.set_xlabel('')
+        ax.tick_params(axis='x', rotation=45)
+        ax.grid(axis='y', alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(FIGURES_DIR / 'cluster_disease_comparison.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"  ✓ Saved: cluster_disease_comparison.png")
 
 
 # ============================================================================
 # STEP 8: GEOGRAPHIC DISTRIBUTION
 # ============================================================================
 
-def map_clusters_by_state(heart_with_clusters):
-    """Show which states have which cluster concentrations."""
+def map_by_state(heart_clustered, profile_df):
+    """Show cluster distribution by state."""
     
-    state_cluster_dist = pd.crosstab(
-        heart_with_clusters['State'], 
-        heart_with_clusters['Cluster'],
+    # Get cluster names
+    cluster_names = dict(zip(profile_df['Cluster'], profile_df['Name']))
+    
+    # Calculate distribution
+    state_dist = pd.crosstab(
+        heart_clustered['State'],
+        heart_clustered['Cluster'],
         normalize='index'
     ) * 100
     
-    # Find dominant cluster per state
-    dominant_cluster = state_cluster_dist.idxmax(axis=1)
+    # Show top 20 states
+    top_states = state_dist.iloc[:20]
     
-    print("\nTop 10 states by cluster dominance:")
-    print(dominant_cluster.head(10))
-    
-    # Heatmap
-    plt.figure(figsize=(10, 12))
-    sns.heatmap(state_cluster_dist.iloc[:20], annot=True, fmt='.1f', 
-                cmap='YlOrRd', cbar_kws={'label': '% of state population'})
-    plt.title('Cluster Distribution by State (Top 20)')
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(top_states, annot=True, fmt='.1f', cmap='YlOrRd',
+                cbar_kws={'label': '% of State Population'})
+    plt.title('Cluster Distribution by State (Top 20)', fontsize=14, fontweight='bold')
     plt.xlabel('Cluster ID')
     plt.ylabel('State')
     plt.tight_layout()
-    plt.savefig(FIGURES_DIR / 'cluster_by_state_heatmap.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.savefig(FIGURES_DIR / 'cluster_by_state.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"  ✓ Saved: cluster_by_state.png")
     
-    return state_cluster_dist, dominant_cluster
+    return state_dist
 
 
 # ============================================================================
-# MAIN EXECUTION PIPELINE
+# MAIN PIPELINE (Simple!)
 # ============================================================================
 
-def run_clustering_pipeline(heart, use_pca=True, use_robust_scaling=False, 
-                           handle_skew=True, try_multiple_algorithms=True):
+def run_clustering_pipeline(heart):
     """
-    Run complete clustering analysis with improved preprocessing.
-    
-    Parameters:
-    - use_pca: Apply PCA for dimensionality reduction (recommended for better scores)
-    - use_robust_scaling: Use RobustScaler instead of StandardScaler (better for outliers)
-    - handle_skew: Apply power transform to skewed features
-    - try_multiple_algorithms: Test both KMeans and Agglomerative clustering
+    Complete clustering in one function.
+    No fancy options - just works!
     """
     
     print("="*80)
-    print("CLUSTERING PIPELINE - Discovering Health Personas")
+    print("CLUSTERING PIPELINE - Finding Health Personas")
     print("="*80)
     
-    # Step 1: Select features
-    features = select_clustering_features(heart)
-    print(f"\n✓ Selected {len(features)} features for clustering")
+    # 1. Select features
+    features = select_features()
+    print(f"\n✓ Using {len(features)} features")
     
-    # Step 2: Prepare data with improved preprocessing
-    print("\n" + "-"*80)
-    print("Preparing data (with PCA and transformations)...")
-    print("-"*80)
-    data_scaled, feature_names, scaler, pca = prepare_clustering_data(
-        heart, features, 
-        use_pca=use_pca,
-        handle_skew=handle_skew,
-        use_robust_scaling=use_robust_scaling
-    )
-    print(f"✓ Prepared {data_scaled.shape[0]:,} samples, {data_scaled.shape[1]} dimensions")
+    # 2. Prepare data
+    print("\nPreparing data...")
+    data_scaled, feature_names, scaler = prepare_data(heart, features)
     
-    # Step 3: Find optimal K and method
-    print("\n" + "-"*80)
-    print("Finding optimal number of clusters and algorithm...")
-    print("-"*80)
-    optimal_k, best_method, best_score = find_optimal_clusters(
-        data_scaled, 
-        try_multiple_algorithms=try_multiple_algorithms
-    )
+    # 3. Find best K
+    best_k, best_score = find_best_k(data_scaled)
     
-    # Step 4: Train final model
-    print("\n" + "-"*80)
-    print(f"Training final model: {best_method} with K={optimal_k}...")
-    print("-"*80)
-    model, labels = train_clustering(data_scaled, k=optimal_k, method=best_method)
+    # 4. Train model
+    model, labels = train_model(data_scaled, k=best_k)
     
-    # Step 5: Profile clusters
-    print("\n" + "-"*80)
-    print("Profiling clusters...")
-    print("-"*80)
-    profile_df, heart_with_clusters = profile_clusters(heart, labels, features)
+    # 5. Profile clusters
+    print("\nAnalyzing clusters...")
+    profile_df, heart_clustered = profile_clusters(heart, labels)
     
-    # Step 6: Name clusters
-    profile_df, cluster_names = assign_cluster_names(profile_df)
-    print("\n✓ Cluster names assigned:")
-    for cid, name in cluster_names.items():
-        print(f"  {name}")
+    # 6. Name clusters (CUSTOMIZE THIS!)
+    profile_df, names = name_clusters(profile_df)
     
-    # Step 7: Create visualizations
-    print("\n" + "-"*80)
-    print("Creating visualizations...")
-    print("-"*80)
-    create_radar_chart(profile_df, cluster_names)
+    # 7. Create visuals
+    print("\nCreating visualizations...")
+    create_visualizations(profile_df)
     
-    # Step 8: Geographic analysis
-    state_dist, dominant = map_clusters_by_state(heart_with_clusters)
+    # 8. Map by state
+    state_dist = map_by_state(heart_clustered, profile_df)
+    
+    # Save everything
+    print("\nSaving outputs...")
+    heart_clustered.to_csv(CLUSTERED_DATA, index=False)
+    profile_df.to_csv(FIGURES_DIR.parent / 'reports' / 'cluster_profiles.csv', index=False)
+    joblib.dump(model, CLUSTER_MODEL)
+    joblib.dump(scaler, SCALER)
     
     print("\n" + "="*80)
-    print("✓ CLUSTERING COMPLETE!")
+    print("✅ CLUSTERING COMPLETE!")
     print("="*80)
-    print(f"Final Silhouette Score: {best_score:.4f}")
-    print(f"Outputs saved:")
-    print(f"  - {FIGURES_DIR / 'optimal_k.png'}")
-    print(f"  - {FIGURES_DIR / 'cluster_radar_charts.png'}")
-    print(f"  - {FIGURES_DIR / 'cluster_by_state_heatmap.png'}")
+    print(f"Silhouette Score: {best_score:.3f}")
+    print(f"Number of Clusters: {best_k}")
+    print(f"\nOutputs:")
+    print(f"  📊 Figures: {FIGURES_DIR}")
+    print(f"  💾 Data: {CLUSTERED_DATA}")
+    print(f"  🤖 Model: {CLUSTER_MODEL}")
     
-    # Save cluster assignments
-    heart_with_clusters.to_csv(CLUSTERED_DATA, index=False)
-    print(f"  - {CLUSTERED_DATA}")
-    
-    return heart_with_clusters, profile_df, cluster_names, model, scaler, pca
+    print("\n🧪 Quick sanity checks:")
+    print(f"✓ All clusters have >1000 people: {(profiles['Size'] > 1000).all()}")
+    print(f"✓ Silhouette score >0.2: {best_score > 0.2}")
+    print(f"✓ Avg BMI reasonable (20-35): {profiles['Avg_BMI'].between(20, 35).all()}")
+    print(f"✓ Files saved: {CLUSTER_MODEL.exists()}")
+    return heart_clustered, profile_df, names, model, scaler
 
 
 # ============================================================================
-# USAGE EXAMPLE
+# RUN IT!
 # ============================================================================
 
 if __name__ == "__main__":
-    # Load your cleaned data
-    print("="*80)
-    print("CLUSTERING PIPELINE")
-    print("="*80)
-    print(f"\n📂 Loading cleaned data from {CLEANED_HEART_DATA}...")
+    print("\n📂 Loading data...")
     heart = pd.read_csv(CLEANED_HEART_DATA)
-    print(f"✓ Loaded {len(heart):,} samples")
+    print(f"✓ Loaded {len(heart):,} samples\n")
     
-    # Run pipeline with improved settings
-    # use_pca=True: Apply PCA for better clustering (recommended)
-    # use_robust_scaling=False: Use StandardScaler (can try True if many outliers)
-    # handle_skew=True: Transform skewed features (recommended)
-    # try_multiple_algorithms=True: Test both KMeans and Agglomerative
-    heart_clustered, profiles, names, model, scaler, pca = run_clustering_pipeline(
-        heart,
-        use_pca=True,
-        use_robust_scaling=False,
-        handle_skew=True,
-        try_multiple_algorithms=True
-    )
+    # Run the pipeline
+    heart_clustered, profiles, names, model, scaler = run_clustering_pipeline(heart)
     
-    # Save model for later use in calculator
-    import joblib
-    joblib.dump(model, CLUSTER_MODEL)
-    joblib.dump(scaler, SCALER)
-    if pca is not None:
-        joblib.dump(pca, MODELS_DIR / 'pca_model.pkl')
-    print(f"\n💾 Models saved:")
-    print(f"  - {CLUSTER_MODEL}")
-    print(f"  - {SCALER}")
-    if pca is not None:
-        print(f"  - {MODELS_DIR / 'pca_model.pkl'}")
-    
-    print("\n✅ All done!")
+    print("\n🎉 Done! Check outputs/ folder for visuals.")
+    print("\nNext steps:")
+    print("  1. Review cluster_profiles.csv")
+    print("  2. Customize cluster names in name_clusters() function")
+    print("  3. Run modeling pipeline: python src/modeling.py")
