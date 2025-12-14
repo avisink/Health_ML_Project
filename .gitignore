@@ -17,7 +17,6 @@ dist/
 # Data files (large)
 data/raw/*.csv
 data/raw/*.xlsx
-data/processed/*.csv
 *.h5
 
 # Models (large)
