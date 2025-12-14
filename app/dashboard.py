@@ -17,9 +17,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import CLEANED_HEART_DATA, RANDOM_STATE
 
-# ============================================================================
 # PAGE CONFIG
-# ============================================================================
 
 st.set_page_config(
     page_title="Health Risk Explorer",
@@ -28,9 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ============================================================================
 # HELPER FUNCTIONS
-# ============================================================================
 
 def get_bmi_category(bmi):
     """Get BMI category label."""
@@ -72,14 +68,12 @@ def safe_percentage(series_or_value, multiplier=100):
         return 0.0
     return float(result)
 
-# ============================================================================
 # LOAD DATA
-# ============================================================================
 
 @st.cache_data
 def load_data():
     """Load and prepare data once."""
-    heart = pd.read_csv("data/processed/heart_cleaned.csv")
+    heart = pd.read_csv(str(CLEANED_HEART_DATA))
     
     # Add helpful categories
     age_labels = ["18-24", "25-29", "30-34", "35-39", "40-44", "45-49",
@@ -100,9 +94,7 @@ def load_data():
 
 heart = load_data()
 
-# ============================================================================
-# SIDEBAR - FILTERS
-# ============================================================================
+# SIDEBAR - FILTERS - need to change to an expandable panel
 
 st.sidebar.header("🔍 Filter Data")
 st.sidebar.markdown("Use filters to explore specific populations. Changes apply to all tabs.")
@@ -181,9 +173,7 @@ st.sidebar.metric("Filtered Sample Size", f"{sample_size:,}")
 if sample_size < 100:
     st.sidebar.warning("⚠️ Small sample size - results may be less reliable")
 
-# ============================================================================
 # MAIN CONTENT - WELCOME SECTION
-# ============================================================================
 
 st.title("🏥 U.S. Health Risk Explorer")
 st.markdown("### *Interactive analysis of 246,000+ Americans' health data*")
@@ -219,9 +209,7 @@ if len(filtered_data) == 0:
 # Create tabs
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "🎯 Risk Calculator", "🗺️ Geographic", "📈 Trends"])
 
-# ============================================================================
 # TAB 1: OVERVIEW
-# ============================================================================
 
 with tab1:
     st.header("Disease Prevalence Overview")
@@ -327,9 +315,7 @@ with tab1:
         else:
             st.info("No data available for lifestyle distribution with current filters.")
 
-# ============================================================================
 # TAB 2: RISK CALCULATOR
-# ============================================================================
 
 with tab2:
     st.header("🎯 Personal Risk Calculator")
