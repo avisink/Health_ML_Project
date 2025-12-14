@@ -68,6 +68,14 @@ def safe_percentage(series_or_value, multiplier=100):
         return 0.0
     return float(result)
 
+# Plotly chart config with reset axes button enabled
+PLOTLY_CONFIG = {
+    "displayModeBar": True,
+    "modeBarButtonsToAdd": ["resetScale2d"],
+    "displaylogo": False,
+    "responsive": True
+}
+
 # LOAD DATA
 
 @st.cache_data
@@ -343,7 +351,7 @@ with tab1:
                 showlegend=False,
                 margin=dict(l=20, r=20, t=20, b=20)
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         else:
             st.info("No data available for disease prevalence with current filters.")
     
@@ -377,7 +385,7 @@ with tab1:
                 showlegend=False,
                 margin=dict(l=20, r=20, t=20, b=20)
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         else:
             st.info("No data available for lifestyle distribution with current filters.")
 
@@ -704,7 +712,7 @@ with tab3:
             fig.update_layout(height=500, showlegend=False, 
                             xaxis_title="Prevalence (%)",
                             margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         
         with col2:
             st.subheader(f"Lowest {selected_condition} Rates")
@@ -717,7 +725,7 @@ with tab3:
             fig.update_layout(height=500, showlegend=False,
                             xaxis_title="Prevalence (%)",
                             margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
         
         # Geographic insights
         st.markdown("---")
@@ -797,7 +805,7 @@ with tab4:
         margin=dict(l=20, r=20, t=20, b=20)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     
     # Comparative analysis
     st.markdown("---")
@@ -818,7 +826,7 @@ with tab4:
                     color_continuous_scale='Reds')
         fig.update_layout(showlegend=False, height=400,
                          margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
     
     with col2:
         # Sleep vs Depression
@@ -832,7 +840,7 @@ with tab4:
                     color_continuous_scale='Purples')
         fig.update_layout(showlegend=False, height=400,
                          margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 # ============================================================================
 # FOOTER
