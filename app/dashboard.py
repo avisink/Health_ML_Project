@@ -503,21 +503,36 @@ with tab2:
         # Calculate average risks for comparison
         avg_diabetes = safe_percentage(filtered_data['Diabetes_Binary'] == 1)
         avg_heart = safe_percentage(filtered_data['HadHeartAttack'])
-        avg_bmi_risk = safe_percentage(filtered_data['BMI'] >= 30)
         
-        # Calculate BMI risk (percentage of people with similar BMI who are obese)
-        bmi_risk_profile = filtered_data[filtered_data['BMI'].between(user_bmi - 2, user_bmi + 2)]
-        if len(bmi_risk_profile) > 0:
-            your_bmi_risk = safe_percentage(bmi_risk_profile['BMI'] >= 30)
+        # Calculate BMI/Obesity risk based on user's actual BMI category
+        # Risk score: 0-100 scale where higher = higher risk
+        if user_bmi < 18.5:
+            # Underweight - HIGH risk
+            your_bmi_risk = 75.0  # High risk score
+            bmi_category_name = "Underweight"
+        elif user_bmi < 25.0:
+            # Normal weight - LOW risk
+            your_bmi_risk = 15.0  # Low risk score
+            bmi_category_name = "Normal Weight"
+        elif user_bmi < 30.0:
+            # Overweight - MODERATE risk
+            your_bmi_risk = 50.0  # Moderate risk score
+            bmi_category_name = "Overweight"
         else:
-            your_bmi_risk = avg_bmi_risk
+            # Obese - HIGH risk
+            your_bmi_risk = 85.0  # High risk score
+            bmi_category_name = "Obese"
+        
+        # Calculate average BMI risk for comparison (percentage of population in high-risk categories)
+        avg_obesity_risk = safe_percentage((filtered_data['BMI'] < 18.5) | (filtered_data['BMI'] >= 25))
         
         # Calculate comparisons
         diabetes_diff = your_diabetes_risk - avg_diabetes
         heart_diff = your_heart_risk - avg_heart
-        bmi_diff = your_bmi_risk - avg_bmi_risk
+        # For BMI, compare to average risk level
+        bmi_diff = your_bmi_risk - 50.0  # Compare to middle point (50)
         
-        def create_risk_card(title, value, risk_level, level_text, color, comparison_diff, similar_pct):
+        def create_risk_card(title, value, risk_level, level_text, color, comparison_diff, similar_pct, bar_value=None):
             """Create a risk card with progress bar."""
             # Determine comparison text and sign
             if comparison_diff > 0:
@@ -537,14 +552,26 @@ with tab2:
             
             # Description text based on risk level
             if risk_level == "LOW":
-                desc_text = "Below average risk" if "BMI" not in title else "Low risk profile"
+                if "Obesity" in title:
+                    desc_text = "Healthy weight range"
+                else:
+                    desc_text = "Below average risk"
             elif risk_level == "MODERATE":
-                desc_text = "Moderate risk level"
+                if "Obesity" in title:
+                    desc_text = "Consider more physical activity"
+                else:
+                    desc_text = "Moderate risk level"
             else:
-                desc_text = "High risk level"
+                if "Obesity" in title:
+                    desc_text = "High risk - consult healthcare provider"
+                else:
+                    desc_text = "High risk level"
             
+            # Use provided bar_value or default to value
+            if bar_value is None:
+                bar_value = value
             # Normalize value for progress bar (cap at 100%)
-            bar_value = min(value, 100.0)
+            bar_value = min(bar_value, 100.0)
             
             return f"""
             <div style="background-color: rgba(38, 39, 48, 0.6); padding: 20px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); height: 100%;">
@@ -568,15 +595,21 @@ with tab2:
             </div>
             """
         
-        # Determine risk levels and colors
-        # BMI thresholds: low < 15, moderate 15-25, high > 25
-        if your_bmi_risk < 15:
+        # Determine risk levels and colors based on BMI category
+        if user_bmi < 18.5:
+            # Underweight - HIGH risk
+            bmi_level = "HIGH"
+            bmi_color = "#e74c3c"  # Red
+        elif user_bmi < 25.0:
+            # Normal weight - LOW risk
             bmi_level = "LOW"
             bmi_color = "#2ecc71"  # Green
-        elif your_bmi_risk < 25:
+        elif user_bmi < 30.0:
+            # Overweight - MODERATE risk
             bmi_level = "MODERATE"
             bmi_color = "#e67e22"  # Orange
         else:
+            # Obese - HIGH risk
             bmi_level = "HIGH"
             bmi_color = "#e74c3c"  # Red
         
@@ -606,8 +639,13 @@ with tab2:
         card_col1, card_col2, card_col3 = st.columns(3)
         
         with card_col1:
-            st.markdown(create_risk_card("BMI", your_bmi_risk, bmi_level, "", bmi_color, bmi_diff, your_bmi_risk),
+            # Display Obesity Risk card
+            # Pass user_bmi for display, but use your_bmi_risk for progress bar
+            # We need to modify the card to accept both values
+            st.markdown(create_risk_card("Risk of Obesity", user_bmi, bmi_level, "", bmi_color, bmi_diff, your_bmi_risk, bar_value=your_bmi_risk),
                        unsafe_allow_html=True)
+            # Add BMI category info below the card
+            st.caption(f"Your BMI: {user_bmi:.1f} ({bmi_category_name})")
         
         with card_col2:
             st.markdown(create_risk_card("Heart Attack Risk", your_heart_risk, heart_level, "", heart_color, heart_diff, your_heart_risk),
@@ -620,51 +658,134 @@ with tab2:
         # What-if scenarios
         st.markdown("---")
         st.subheader("💡 What If You Changed...")
-        st.caption("See how lifestyle changes could impact your diabetes risk")
+        st.caption("See how lifestyle changes could impact your health risks")
+        
+        # Use a broader comparison dataset (same age and BMI range, but allow different lifestyle factors)
+        comparison_profile = filtered_data.copy()
+        age_idx = age_labels.index(user_age)
+        comparison_profile = comparison_profile[comparison_profile['AgeCategory'] == age_idx]
+        comparison_profile = comparison_profile[comparison_profile['BMI'].between(user_bmi - 2, user_bmi + 2)]
         
         scenarios = []
         
-        # Scenario 1: Improve sleep
+        def calculate_risk_reductions(improved_group):
+            """Calculate risk reductions for all three metrics."""
+            if len(improved_group) == 0:
+                return None
+            
+            new_diabetes = safe_percentage(improved_group['Diabetes_Binary'] == 1)
+            new_heart = safe_percentage(improved_group['HadHeartAttack'])
+            
+            # For BMI risk, calculate based on BMI distribution in improved group
+            improved_bmi_avg = improved_group['BMI'].mean()
+            if pd.isna(improved_bmi_avg):
+                new_bmi_risk = your_bmi_risk
+            elif improved_bmi_avg < 18.5:
+                new_bmi_risk = 75.0
+            elif improved_bmi_avg < 25.0:
+                new_bmi_risk = 15.0
+            elif improved_bmi_avg < 30.0:
+                new_bmi_risk = 50.0
+            else:
+                new_bmi_risk = 85.0
+            
+            return {
+                'diabetes': (your_diabetes_risk - new_diabetes, new_diabetes),
+                'heart': (your_heart_risk - new_heart, new_heart),
+                'bmi': (your_bmi_risk - new_bmi_risk, new_bmi_risk)
+            }
+        
+        # Scenario 1: Improve sleep (if currently getting less than 7 hours)
         if user_sleep < 7:
-            better_sleep = risk_profile[risk_profile['SleepHours'] >= 7]
-            if len(better_sleep) > 0:
-                new_risk = (better_sleep['Diabetes_Binary'] == 1).mean() * 100
-                reduction = your_diabetes_risk - new_risk
-                if reduction > 0:
-                    scenarios.append(("😴 Increased sleep to 7-9 hours", reduction, new_risk))
+            better_sleep = comparison_profile[comparison_profile['SleepHours'] >= 7]
+            reductions = calculate_risk_reductions(better_sleep)
+            if reductions is None:
+                # Fallback to filtered_data if comparison_profile is too small
+                better_sleep_fallback = filtered_data[filtered_data['SleepHours'] >= 7]
+                reductions = calculate_risk_reductions(better_sleep_fallback)
+            if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0):
+                scenarios.append(("😴 Increased sleep to 7-9 hours", reductions))
         
-        # Scenario 2: Start exercising
+        # Scenario 2: Start exercising (if currently inactive)
         if user_active == "No":
-            active_group = risk_profile[risk_profile['PhysicalActivities'] == 1]
-            if len(active_group) > 0:
-                new_risk = (active_group['Diabetes_Binary'] == 1).mean() * 100
-                reduction = your_diabetes_risk - new_risk
-                if reduction > 0:
-                    scenarios.append(("🏃 Started exercising regularly", reduction, new_risk))
+            active_group = comparison_profile[comparison_profile['PhysicalActivities'] == 1]
+            reductions = calculate_risk_reductions(active_group)
+            if reductions is None:
+                # Fallback to filtered_data
+                active_fallback = filtered_data[filtered_data['PhysicalActivities'] == 1]
+                reductions = calculate_risk_reductions(active_fallback)
+            if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0):
+                scenarios.append(("🏃 Started exercising regularly", reductions))
         
-        # Scenario 3: Lose weight
-        if user_bmi >= 25:
-            normal_weight = risk_profile[risk_profile['BMI'] < 25]
-            if len(normal_weight) > 0:
-                new_risk = (normal_weight['Diabetes_Binary'] == 1).mean() * 100
-                reduction = your_diabetes_risk - new_risk
-                if reduction > 0:
-                    scenarios.append(("⚖️ Achieved healthy weight (BMI <25)", reduction, new_risk))
+        # Scenario 3: Weight management based on BMI category
+        if user_bmi < 18.5:
+            # Underweight - advise healthy eating (no risk reduction calculation needed)
+            scenarios.append(("🍎 Focus on healthy eating and nutrition", None))
+        elif user_bmi >= 25 and user_bmi < 30:
+            # Overweight - advise more physical activity
+            active_normal_weight = comparison_profile[
+                (comparison_profile['BMI'] < 25) & 
+                (comparison_profile['PhysicalActivities'] == 1)
+            ]
+            reductions = calculate_risk_reductions(active_normal_weight)
+            if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0 or reductions['bmi'][0] > 0):
+                scenarios.append(("🏃 Be more physically active and achieve healthy weight (BMI <25)", reductions))
+            else:
+                scenarios.append(("🏃 Be more physically active to reduce weight", None))
+        elif user_bmi >= 30:
+            # Obese - advise weight loss
+            healthy_bmi = comparison_profile[comparison_profile['BMI'] < 25]
+            reductions = calculate_risk_reductions(healthy_bmi)
+            if reductions is None:
+                # Fallback: compare to people with lower BMI in same age group
+                age_filtered = filtered_data[filtered_data['AgeCategory'] == age_idx]
+                healthy_bmi_fallback = age_filtered[age_filtered['BMI'] < 25]
+                reductions = calculate_risk_reductions(healthy_bmi_fallback)
+            if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0 or reductions['bmi'][0] > 0):
+                scenarios.append(("⚖️ Achieved healthy weight (BMI <25)", reductions))
         
-        # Scenario 4: Quit smoking
+        # Scenario 4: Quit smoking (if currently smoking)
         if user_smoker == "Current":
-            nonsmoker = risk_profile[risk_profile['SmokerStatus'] == 0]
-            if len(nonsmoker) > 0:
-                new_risk = (nonsmoker['Diabetes_Binary'] == 1).mean() * 100
-                reduction = your_diabetes_risk - new_risk
-                if reduction > 0:
-                    scenarios.append(("🚭 Quit smoking", reduction, new_risk))
+            nonsmoker = comparison_profile[comparison_profile['SmokerStatus'] == 0]
+            reductions = calculate_risk_reductions(nonsmoker)
+            if reductions is None:
+                # Fallback to filtered_data
+                nonsmoker_fallback = filtered_data[filtered_data['SmokerStatus'] == 0]
+                reductions = calculate_risk_reductions(nonsmoker_fallback)
+            if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0):
+                scenarios.append(("🚭 Quit smoking", reductions))
         
+        # Display scenarios
         if scenarios:
-            for change, reduction, new_risk in scenarios:
-                st.success(f"**{change}** → Risk drops from {your_diabetes_risk:.1f}% to {new_risk:.1f}% (**-{reduction:.1f}%** reduction)")
+            for scenario in scenarios:
+                change = scenario[0]
+                reductions = scenario[1]
+                
+                if reductions is None:
+                    # For advice without specific risk reduction (like underweight advice)
+                    st.info(f"**{change}** - This can help improve your overall health and reduce disease risk.")
+                else:
+                    # Build risk reduction message for all three metrics
+                    risk_changes = []
+                    
+                    if reductions['diabetes'][0] > 0:
+                        risk_changes.append(f"**Diabetes risk** drops from {your_diabetes_risk:.1f}% to {reductions['diabetes'][1]:.1f}% (-{reductions['diabetes'][0]:.1f}%)")
+                    
+                    if reductions['heart'][0] > 0:
+                        risk_changes.append(f"**Heart attack risk** drops from {your_heart_risk:.1f}% to {reductions['heart'][1]:.1f}% (-{reductions['heart'][0]:.1f}%)")
+                    
+                    if reductions['bmi'][0] > 0:
+                        risk_changes.append(f"**Obesity risk** drops from {your_bmi_risk:.1f} to {reductions['bmi'][1]:.1f} (-{reductions['bmi'][0]:.1f})")
+                    
+                    if risk_changes:
+                        st.success(f"**{change}** → " + " | ".join(risk_changes))
         else:
-            st.info("🌟 **Great job!** You're already following healthy lifestyle habits. Keep it up!")
+            # Only show positive message if user actually has good habits
+            has_issues = (user_sleep < 7) or (user_active == "No") or (user_bmi < 18.5) or (user_bmi >= 25) or (user_smoker == "Current")
+            if has_issues:
+                st.warning("⚠️ **Unable to calculate improvement scenarios** - Try adjusting your filters or check back with more data.")
+            else:
+                st.info("🌟 **Great job!** You're already following healthy lifestyle habits. Keep it up!")
 
 # ============================================================================
 # TAB 3: GEOGRAPHIC
