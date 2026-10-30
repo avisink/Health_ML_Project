@@ -9,7 +9,7 @@ An interactive Streamlit dashboard built on the CDC BRFSS 2022 survey (246,022 r
 - **📊 Overview:** disease prevalence and lifestyle patterns for any filtered population
 - **🎯 Risk Calculator:** compare your profile to similar respondents and see "what if" lifestyle scenarios
 - **🧬 Health Personas:** find the ML cluster you're closest to, see yourself on a PCA map, and dig into the model
-- **🗺️ Geographic:** state-by-state comparisons
+- **🗺️ Geography:** U.S. choropleth map plus state-by-state rankings
 - **📈 Trends:** how health changes with age
 
 ## 🚀 Quick Start
@@ -34,7 +34,7 @@ streamlit run app/dashboard.py
 ├── src/               # Source code
 ├── models/            # Trained models
 ├── outputs/           # Results
-├── app/               # Streamlit app (dashboard.py, cluster_explorer.py)
+├── app/               # Streamlit app (dashboard.py, cluster_explorer.py, ui.py design system)
 └── notebooks/         # Analysis notebooks
 ```
 
@@ -51,19 +51,19 @@ time since last checkup, flu shot, and diabetes / heart attack / depression hist
 - Silhouette ≈ 0.13 (8k-row sample), Davies-Bouldin ≈ 1.94
 
 ### The personas
-| | Persona | Share | What defines it |
-|---|---|---|---|
-| 🩹 | High Symptom Burden | 8% | ~26 physically unwell days/month, lowest self-rated health, least active |
-| 🧠 | Mental Health Focus | 13% | ~99% depression diagnosis, but mostly still active |
-| 🩺 | Overdue for a Checkup | 9% | Younger, healthy, no checkup in 2+ years |
-| 🌱 | Healthy, Skipping the Flu Shot | 25% | Active, healthy, no flu vaccine |
-| 🩸 | Managing Diabetes | 10% | Older, highest BMI, ~96% diabetes |
-| ⭐ | Thriving & Engaged | 29% | Active, healthy, fewest smokers, all vaccinated |
-| ❤️ | Heart Attack Survivors | 5% | Oldest; all have had a heart attack |
+| Persona | Share | What defines it |
+|---|---|---|
+| High Symptom Burden | 8% | ~26 physically unwell days/month, lowest self-rated health, least active |
+| Mental Health Focus | 13% | ~99% depression diagnosis, but mostly still active |
+| Overdue for a Checkup | 9% | Younger, healthy, no checkup in 2+ years |
+| Healthy, Skipping the Flu Shot | 25% | Active, healthy, no flu vaccine |
+| Managing Diabetes | 10% | Older, highest BMI, ~96% diabetes |
+| Thriving & Engaged | 29% | Active, healthy, fewest smokers, all vaccinated |
+| Heart Attack Survivors | 5% | Oldest; all have had a heart attack |
 
 ### In the app (🧬 Health Personas tab)
 - **Your persona:** enter your profile and get matched to the nearest centroid (same rule as `KMeans.predict`), with a radar chart of you vs. your persona vs. everyone and a closeness score for every persona
-- **Persona map:** 2D/3D PCA projection of 8,000 respondents with persona centers and a ⭐ for you
+- **Persona map:** 2D/3D PCA projection of 8,000 respondents with persona centers and a star marking you
 - **Under the hood:** centroid z-score heatmap, per-cluster silhouette distributions, PCA loadings, your per-feature distance breakdown, and downloadable profiles
 
 ### Known limitations

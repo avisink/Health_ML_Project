@@ -17,15 +17,17 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import CLEANED_HEART_DATA, RANDOM_STATE
 from app.cluster_explorer import render_cluster_tab
+from app import ui
 
 # PAGE CONFIG
 
 st.set_page_config(
     page_title="Health Risk Explorer",
-    page_icon="🏥",
+    page_icon=":material/monitor_heart:",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
+ui.inject_css()
 
 # HELPER FUNCTIONS
 
@@ -48,15 +50,6 @@ def calculate_bmi(weight_lbs, height_ft, height_in):
     bmi = (weight_lbs / (height_inches ** 2)) * 703
     return round(bmi, 1)
 
-def get_risk_level(value, thresholds):
-    """Get risk level based on value and thresholds."""
-    if value <= thresholds[0]:
-        return ("Low", "🟢", "lightgreen")
-    elif value <= thresholds[1]:
-        return ("Moderate", "🟡", "yellow")
-    else:
-        return ("High", "🔴", "lightcoral")
-
 def safe_percentage(series_or_value, multiplier=100):
     """Safely calculate percentage, handling NaN and Inf values."""
     if isinstance(series_or_value, pd.Series):
@@ -69,12 +62,19 @@ def safe_percentage(series_or_value, multiplier=100):
         return 0.0
     return float(result)
 
-# Plotly chart config with reset axes button enabled
-PLOTLY_CONFIG = {
-    "displayModeBar": True,
-    "modeBarButtonsToAdd": ["resetScale2d"],
-    "displaylogo": False,
-    "responsive": True
+PLOTLY_CONFIG = ui.PLOTLY_CONFIG
+
+STATE_CODES = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA', 'Colorado': 'CO',
+    'Connecticut': 'CT', 'Delaware': 'DE', 'District Of Columbia': 'DC', 'Florida': 'FL', 'Georgia': 'GA',
+    'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+    'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD', 'Massachusetts': 'MA',
+    'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO', 'Montana': 'MT',
+    'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM',
+    'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+    'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD',
+    'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA',
+    'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY'
 }
 
 # LOAD DATA
@@ -105,20 +105,26 @@ heart = load_data()
 
 # MAIN CONTENT - WELCOME SECTION
 
-st.title("🏥 U.S. Health Risk Explorer")
-st.markdown("### *Interactive analysis of 246,000+ Americans' health data*")
+ui.hero(
+    "Health Risk Intelligence Platform",
+    "How do everyday habits shape health across America?",
+    "Explore CDC survey data from 246,000+ adults, estimate your own risk, and find the health persona "
+    "machine learning places you in.",
+    [("respondents", "246,022"), ("states & territories", f"{heart['State'].nunique()}"),
+     ("health personas", "7"), ("source", "CDC BRFSS 2022")]
+)
 
 # Welcome/Onboarding section (collapsible)
-with st.expander("ℹ️ **Getting Started - Click to expand**", expanded=False):
+with st.expander("**Getting started**", expanded=False, icon=":material/info:"):
     st.markdown("""
     **Welcome!** This dashboard helps you explore health patterns and understand your personal risk factors.
     
     **How to use:**
-    1. **📊 Overview Tab**: Start here to see disease prevalence and lifestyle patterns
-    2. **🎯 Risk Calculator**: Enter your profile to see personalized risk estimates
-    3. **🧬 Health Personas**: Find the health persona (ML cluster) you're closest to
-    4. **🗺️ Geographic Tab**: Compare health outcomes across U.S. states
-    5. **📈 Trends Tab**: Explore how health changes with age
+    1. **Overview**: Start here to see disease prevalence and lifestyle patterns
+    2. **Risk calculator**: Enter your profile to see personalized risk estimates
+    3. **Health personas**: Find the health persona (ML cluster) you're closest to
+    4. **Geography**: Compare health outcomes across U.S. states
+    5. **Trends**: Explore how health changes with age
     
     **Tips:**
     - Use the filters below to focus on specific populations
@@ -135,13 +141,13 @@ age_labels = ["18-24", "25-29", "30-34", "35-39", "40-44", "45-49",
               "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80+"]
 
 # Filter panel (expandable)
-with st.expander("🔍 **Configure Filters**", expanded=False):
+with st.expander("**Filter the population**", expanded=False, icon=":material/tune:"):
     # Header with title and reset button
     header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
         st.markdown("**Use filters to explore specific populations. Changes apply to all tabs.**")
     with header_col2:
-        if st.button("🔄 Reset All Filters", use_container_width=True):
+        if st.button("Reset all filters", icon=":material/restart_alt:", use_container_width=True):
             st.rerun()
     
     st.markdown("---")
@@ -151,7 +157,7 @@ with st.expander("🔍 **Configure Filters**", expanded=False):
     
     # Column 1: Age Groups with checkboxes
     with col1:
-        st.markdown("**Age Groups** ℹ️")
+        st.markdown("**Age groups**")
         selected_ages = []
         for age in age_labels:
             if st.checkbox(age, value=True, key=f"age_{age}"):
@@ -159,7 +165,7 @@ with st.expander("🔍 **Configure Filters**", expanded=False):
     
     # Column 2: Lifestyle Filters and State
     with col2:
-        st.markdown("**Lifestyle Filters**")
+        st.markdown("**Lifestyle**")
         
         smoking_filter = st.radio(
             "Smoking Status",
@@ -178,7 +184,7 @@ with st.expander("🔍 **Configure Filters**", expanded=False):
         )
         
         st.markdown("---")
-        st.markdown("**State (Optional)** ℹ️")
+        st.markdown("**State (optional)**")
         all_states = sorted(heart['State'].str.title().unique())
         selected_states = st.multiselect(
             "Choose options...",
@@ -191,7 +197,7 @@ with st.expander("🔍 **Configure Filters**", expanded=False):
     
     # Column 3: Filtered Sample Size
     with col3:
-        st.markdown("**Filtered Sample Size**")
+        st.markdown("**Filtered sample size**")
         
         # Apply filters to calculate sample size (will be recalculated below)
         temp_filtered = heart.copy()
@@ -220,9 +226,9 @@ with st.expander("🔍 **Configure Filters**", expanded=False):
         
         # Display sample size
         sample_size = len(temp_filtered)
-        st.metric("", f"{sample_size:,}", label_visibility="collapsed")
+        st.metric("Filtered sample size", f"{sample_size:,}", label_visibility="collapsed")
         if sample_size < 100:
-            st.warning("⚠️ Small sample size")
+            st.warning("Small sample size", icon=":material/warning:")
 
 # Apply filters to the full dataset (outside expander for use in tabs)
 # Get filter values from session state or use defaults
@@ -260,21 +266,24 @@ if activity_filter == "Active Only":
 elif activity_filter == "Inactive Only":
     filtered_data = filtered_data[~active_condition]
 
-st.markdown("---")
-
 # Check for empty filtered data
 if len(filtered_data) == 0:
-    st.error("⚠️ **No data matches your current filters.** Please adjust your filter selections above.")
+    st.error("**No data matches your current filters.** Please adjust your filter selections above.", icon=":material/error:")
     st.stop()
 
 # Create tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "🎯 Risk Calculator", "🧬 Health Personas", "🗺️ Geographic", "📈 Trends"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    ":material/insights: Overview",
+    ":material/calculate: Risk calculator",
+    ":material/hub: Health personas",
+    ":material/map: Geography",
+    ":material/trending_up: Trends",
+])
 
 # TAB 1: OVERVIEW
 
 with tab1:
-    st.header("Disease Prevalence Overview")
-    st.markdown("Key health metrics for your selected population")
+    ui.section("Disease prevalence", "Key health metrics for your selected population", "activity")
     
     # Key metrics row with progress bars
     col1, col2, col3, col4 = st.columns(4)
@@ -285,45 +294,26 @@ with tab1:
     depression_pct = safe_percentage(filtered_data['HadDepressiveDisorder'])
     obesity_pct = safe_percentage(filtered_data['BMI'] >= 30)
     
-    def create_metric_card(label, value, color, help_text=""):
-        """Create a metric card with progress bar."""
-        # Ensure value doesn't exceed 100% for display
-        display_value = min(value, 100.0)
-        return f"""
-        <div style="background-color: rgba(38, 39, 48, 0.6); padding: 20px; border-radius: 12px; margin-bottom: 10px; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <span style="font-size: 15px; font-weight: 500; color: #ffffff;">{label}</span>
-                <span style="font-size: 20px; font-weight: bold; color: {color};">{value:.1f}%</span>
-            </div>
-            <div style="background-color: rgba(255, 255, 255, 0.15); height: 10px; border-radius: 5px; overflow: hidden; position: relative;">
-                <div style="background-color: {color}; height: 100%; width: {display_value}%; border-radius: 5px; transition: width 0.3s ease;"></div>
-            </div>
-        </div>
-        """
-    
     with col1:
-        st.markdown(create_metric_card("Diabetes", diabetes_pct, "#2ecc71"), 
-                   unsafe_allow_html=True)
-    
+        st.markdown(ui.stat_card("Diabetes", f"{diabetes_pct:.1f}%", diabetes_pct, ui.SERIES[0], "droplet"),
+                    unsafe_allow_html=True)
     with col2:
-        st.markdown(create_metric_card("Heart Attack", heart_pct, "#3498db"),
-                   unsafe_allow_html=True)
-    
+        st.markdown(ui.stat_card("Heart attack", f"{heart_pct:.1f}%", heart_pct, ui.SERIES[0], "heart-pulse"),
+                    unsafe_allow_html=True)
     with col3:
-        st.markdown(create_metric_card("Depression", depression_pct, "#9b59b6"),
-                   unsafe_allow_html=True)
-    
+        st.markdown(ui.stat_card("Depression", f"{depression_pct:.1f}%", depression_pct, ui.SERIES[0], "brain"),
+                    unsafe_allow_html=True)
     with col4:
-        st.markdown(create_metric_card("Obesity", obesity_pct, "#e67e22"),
-                   unsafe_allow_html=True)
-    
-    st.markdown("---")
+        st.markdown(ui.stat_card("Obesity (BMI 30+)", f"{obesity_pct:.1f}%", obesity_pct, ui.SERIES[0], "scale"),
+                    unsafe_allow_html=True)
+
+    st.write("")
     
     # Interactive disease comparison
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("Disease Prevalence")
+        st.subheader("Disease prevalence")
         st.caption("Compare prevalence rates across different conditions")
         
         diseases = {
@@ -343,9 +333,9 @@ with tab1:
                 go.Bar(x=list(diseases_clean.values()), 
                        y=list(diseases_clean.keys()),
                        orientation='h',
-                       marker_color=['#e74c3c', '#e67e22', '#f39c12', '#3498db', '#2ecc71', '#9b59b6'][:len(diseases_clean)],
+                       marker_color=ui.SERIES[0],
                        text=[f'{v:.1f}%' for v in diseases_clean.values()],
-                       textposition='auto')
+                       textposition='outside', cliponaxis=False)
             ])
             fig.update_layout(
                 xaxis_title="Prevalence (%)",
@@ -353,13 +343,13 @@ with tab1:
                 showlegend=False,
                 margin=dict(l=20, r=20, t=20, b=20)
             )
-            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+            ui.chart(fig)
         else:
             st.info("No data available for disease prevalence with current filters.")
     
     with col2:
-        st.subheader("Lifestyle Distribution")
-        st.caption("Percentage of population with healthy lifestyle factors")
+        st.subheader("Lifestyle snapshot")
+        st.caption("Share of the selected population with each lifestyle factor")
         
         lifestyle_data = {
             'Physically Active': safe_percentage(filtered_data['PhysicalActivities']),
@@ -377,9 +367,9 @@ with tab1:
             fig = go.Figure(data=[
                 go.Bar(x=list(lifestyle_data_clean.keys()), 
                        y=list(lifestyle_data_clean.values()),
-                       marker_color=['#2ecc71', '#3498db', '#e74c3c', '#e67e22', '#9b59b6'][:len(lifestyle_data_clean)],
+                       marker_color=ui.SERIES[0],
                        text=[f'{v:.1f}%' for v in lifestyle_data_clean.values()],
-                       textposition='auto')
+                       textposition='outside', cliponaxis=False)
             ])
             fig.update_layout(
                 yaxis_title="Percentage (%)",
@@ -387,21 +377,22 @@ with tab1:
                 showlegend=False,
                 margin=dict(l=20, r=20, t=20, b=20)
             )
-            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+            ui.chart(fig)
         else:
             st.info("No data available for lifestyle distribution with current filters.")
 
 # TAB 2: RISK CALCULATOR
 
 with tab2:
-    st.header("🎯 Personal Risk Calculator")
-    st.markdown("**Enter your information to see personalized risk estimates based on similar profiles in the data**")
-    st.info("💡 **How it works:** We compare your profile to people with similar characteristics in our dataset to estimate your risk levels.")
+    ui.section("Personal risk calculator",
+               "See how often people with a profile like yours report each condition", "stethoscope")
+    ui.callout("<b>How it works:</b> we find respondents with your age group, a BMI within ±2, and the same activity "
+               "and smoking status, then show how common each condition is among them.")
     
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        st.subheader("Your Profile")
+        st.subheader("Your profile")
         
         # BMI Calculator option
         bmi_method = st.radio(
@@ -421,10 +412,10 @@ with tab2:
             
             user_bmi = calculate_bmi(weight_lbs, height_ft, height_in)
             bmi_category = get_bmi_category(user_bmi)
-            st.success(f"**Your BMI: {user_bmi}** ({bmi_category})")
+            st.success(f"**Your BMI: {user_bmi}** ({bmi_category})", icon=":material/scale:")
             
             # BMI reference
-            with st.expander("📏 BMI Reference Guide"):
+            with st.expander("BMI reference guide", icon=":material/straighten:"):
                 st.markdown("""
                 - **Underweight**: BMI < 18.5
                 - **Normal**: BMI 18.5 - 24.9
@@ -485,16 +476,16 @@ with tab2:
             sample_info = "Based on general population (limited similar profiles found)"
     
     with col2:
-        st.subheader("Your Risk Profile")
+        st.subheader("Your risk profile")
         st.caption(sample_info)
         
         # Risk interpretation guide
-        with st.expander("📊 How to Read Your Risk Scores"):
+        with st.expander("How to read your risk scores", icon=":material/help:"):
             st.markdown("""
-            **Risk Levels:**
-            - 🟢 **Low (Green)**: Below average risk
-            - 🟡 **Moderate (Yellow)**: Average to slightly elevated risk
-            - 🔴 **High (Red)**: Above average risk
+            **Risk levels:**
+            - **Low**: below average risk
+            - **Moderate**: average to slightly elevated risk
+            - **High**: above average risk
             
             **What the numbers mean:**
             - These percentages show the likelihood of having (or developing) each condition
@@ -534,108 +525,81 @@ with tab2:
         # For BMI, compare to average risk level
         bmi_diff = your_bmi_risk - 50.0  # Compare to middle point (50)
         
-        def create_risk_card(title, value, risk_level, level_text, color, comparison_diff, similar_pct, bar_value=None):
-            """Create a risk card with progress bar."""
-            # Determine comparison text and sign
-            if comparison_diff > 0:
-                comp_text = f"+{comparison_diff:.1f}%"
-                comp_color = "#e67e22"
-            else:
-                comp_text = f"{comparison_diff:.1f}%"
-                comp_color = "#2ecc71"
-            
-            # Risk level icon
-            if risk_level == "LOW":
-                icon = "✓"
-            elif risk_level == "MODERATE":
-                icon = "⚠"
-            else:
-                icon = "✗"
-            
-            # Description text based on risk level
-            if risk_level == "LOW":
-                if "Obesity" in title:
-                    desc_text = "Healthy weight range"
-                else:
-                    desc_text = "Below average risk"
-            elif risk_level == "MODERATE":
-                if "Obesity" in title:
-                    desc_text = "Consider more physical activity"
-                else:
-                    desc_text = "Moderate risk level"
-            else:
-                if "Obesity" in title:
-                    desc_text = "High risk - consult healthcare provider"
-                else:
-                    desc_text = "High risk level"
-            
-            # Use provided bar_value or default to value
+        def create_risk_card(title, value, risk_level, level_text, color, comparison_diff, similar_pct,
+                             bar_value=None, icon_name="activity", unit="%", footnote=None):
+            """Risk card: value, status pill (icon + label), meter, and comparison to average."""
             if bar_value is None:
                 bar_value = value
-            # Normalize value for progress bar (cap at 100%)
-            bar_value = min(bar_value, 100.0)
-            
+            bar_value = min(max(bar_value, 0.0), 100.0)
+
+            if "Obesity" in title:
+                desc_text = {"LOW": "Healthy weight range",
+                             "MODERATE": "Consider more physical activity",
+                             "HIGH": "Consider talking with a healthcare provider"}[risk_level]
+            else:
+                desc_text = {"LOW": "Below average risk",
+                             "MODERATE": "Moderate risk level",
+                             "HIGH": "High risk level"}[risk_level]
+
+            if footnote is None:
+                trend = "trending-up" if comparison_diff > 0 else "trending-down"
+                footnote = (f'{ui.icon(trend, 14)} {comparison_diff:+.1f} pts vs. average for your filters')
+
             return f"""
-            <div style="background-color: rgba(38, 39, 48, 0.6); padding: 20px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); height: 100%;">
-                <div style="margin-bottom: 12px;">
-                    <span style="font-size: 15px; font-weight: 500; color: #ffffff;">{title}</span>
+            <div class="hr-card">
+                <div class="hr-row" style="justify-content:space-between;align-items:center;">
+                    <span style="display:flex;gap:10px;align-items:center;font-size:14px;font-weight:500;color:{ui.TEXT_2};">
+                        {ui.icon_badge(icon_name, ui.ACCENT, 32)}{title}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                    <span style="font-size: 28px; font-weight: bold; color: {color};">{value:.2f}</span>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-size: 13px; color: {color}; font-weight: 600;">{icon} {risk_level}</span>
-                    </div>
+                <div class="hr-row" style="justify-content:space-between;align-items:center;margin:14px 0 12px;">
+                    <span style="font-size:32px;font-weight:600;color:{ui.TEXT};">{value:.1f}{unit}</span>
+                    {ui.status_pill(risk_level)}
                 </div>
-                <div style="background-color: rgba(255, 255, 255, 0.15); height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 12px;">
-                    <div style="background-color: {color}; height: 100%; width: {bar_value}%; border-radius: 5px; transition: width 0.3s ease;"></div>
-                </div>
-                <div style="font-size: 12px; color: #b0b0b0; margin-bottom: 8px;">{desc_text}</div>
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
-                    <span style="color: {comp_color}; font-weight: 500;">{comp_text}</span>
-                    <span style="color: #b0b0b0;">{similar_pct:.1f}% of similar profiles</span>
-                </div>
+                <div class="hr-meter"><div style="width:{bar_value:.1f}%;background:{color};"></div></div>
+                <div style="font-size:13px;color:{ui.TEXT_2};margin-top:12px;">{desc_text}</div>
+                <div style="font-size:12.5px;color:{ui.MUTED};margin-top:6px;display:flex;gap:6px;align-items:center;">{footnote}</div>
             </div>
             """
-        
+
         # Determine risk levels and colors based on BMI category
         if user_bmi < 18.5:
             # Underweight - HIGH risk
             bmi_level = "HIGH"
-            bmi_color = "#e74c3c"  # Red
+            bmi_color = ui.STATUS["HIGH"][0]
         elif user_bmi < 25.0:
             # Normal weight - LOW risk
             bmi_level = "LOW"
-            bmi_color = "#2ecc71"  # Green
+            bmi_color = ui.STATUS["LOW"][0]
         elif user_bmi < 30.0:
             # Overweight - MODERATE risk
             bmi_level = "MODERATE"
-            bmi_color = "#e67e22"  # Orange
+            bmi_color = ui.STATUS["MODERATE"][0]
         else:
             # Obese - HIGH risk
             bmi_level = "HIGH"
-            bmi_color = "#e74c3c"  # Red
+            bmi_color = ui.STATUS["HIGH"][0]
         
         # Diabetes thresholds: low < 10, moderate 10-20, high > 20
         if your_diabetes_risk < 10:
             diabetes_level = "LOW"
-            diabetes_color = "#2ecc71"  # Green
+            diabetes_color = ui.STATUS["LOW"][0]
         elif your_diabetes_risk < 20:
             diabetes_level = "MODERATE"
-            diabetes_color = "#e67e22"  # Orange
+            diabetes_color = ui.STATUS["MODERATE"][0]
         else:
             diabetes_level = "HIGH"
-            diabetes_color = "#e74c3c"  # Red
+            diabetes_color = ui.STATUS["HIGH"][0]
         
         # Heart Attack thresholds: low < 5, moderate 5-10, high > 10
         if your_heart_risk < 5:
             heart_level = "LOW"
-            heart_color = "#2ecc71"  # Green
+            heart_color = ui.STATUS["LOW"][0]
         elif your_heart_risk < 10:
             heart_level = "MODERATE"
-            heart_color = "#e67e22"  # Orange
+            heart_color = ui.STATUS["MODERATE"][0]
         else:
             heart_level = "HIGH"
-            heart_color = "#e74c3c"  # Red
+            heart_color = ui.STATUS["HIGH"][0]
         
         # Display risk cards horizontally (side by side)
         card_col1, card_col2, card_col3 = st.columns(3)
@@ -644,23 +608,25 @@ with tab2:
             # Display Obesity Risk card
             # Pass user_bmi for display, but use your_bmi_risk for progress bar
             # We need to modify the card to accept both values
-            st.markdown(create_risk_card("Risk of Obesity", user_bmi, bmi_level, "", bmi_color, bmi_diff, your_bmi_risk, bar_value=your_bmi_risk),
-                       unsafe_allow_html=True)
-            # Add BMI category info below the card
-            st.caption(f"Your BMI: {user_bmi:.1f} ({bmi_category_name})")
+            st.markdown(create_risk_card("Weight (BMI)", user_bmi, bmi_level, "", bmi_color, bmi_diff, your_bmi_risk,
+                                         bar_value=your_bmi_risk, icon_name="scale", unit="",
+                                         footnote=f"Category: {bmi_category_name}"),
+                        unsafe_allow_html=True)
         
         with card_col2:
-            st.markdown(create_risk_card("Heart Attack Risk", your_heart_risk, heart_level, "", heart_color, heart_diff, your_heart_risk),
+            st.markdown(create_risk_card("Heart attack", your_heart_risk, heart_level, "", heart_color, heart_diff, your_heart_risk,
+                                         icon_name="heart-pulse"),
                        unsafe_allow_html=True)
         
         with card_col3:
-            st.markdown(create_risk_card("Diabetes Risk", your_diabetes_risk, diabetes_level, "", diabetes_color, diabetes_diff, your_diabetes_risk),
+            st.markdown(create_risk_card("Diabetes", your_diabetes_risk, diabetes_level, "", diabetes_color, diabetes_diff, your_diabetes_risk,
+                                         icon_name="droplet"),
                        unsafe_allow_html=True)
         
         # What-if scenarios
-        st.markdown("---")
-        st.subheader("💡 What If You Changed...")
-        st.caption("See how lifestyle changes could impact your health risks")
+        st.write("")
+        st.subheader("What if you changed...")
+        st.caption("Risk among people like you who already have the healthier habit")
         
         # Use a broader comparison dataset (same age and BMI range, but allow different lifestyle factors)
         comparison_profile = filtered_data.copy()
@@ -706,7 +672,7 @@ with tab2:
                 better_sleep_fallback = filtered_data[filtered_data['SleepHours'] >= 7]
                 reductions = calculate_risk_reductions(better_sleep_fallback)
             if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0):
-                scenarios.append(("😴 Increased sleep to 7-9 hours", reductions))
+                scenarios.append((("moon", "Sleep 7-9 hours a night"), reductions))
         
         # Scenario 2: Start exercising (if currently inactive)
         if user_active == "No":
@@ -717,12 +683,12 @@ with tab2:
                 active_fallback = filtered_data[filtered_data['PhysicalActivities'] == 1]
                 reductions = calculate_risk_reductions(active_fallback)
             if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0):
-                scenarios.append(("🏃 Started exercising regularly", reductions))
+                scenarios.append((("activity", "Exercise regularly"), reductions))
         
         # Scenario 3: Weight management based on BMI category
         if user_bmi < 18.5:
             # Underweight - advise healthy eating (no risk reduction calculation needed)
-            scenarios.append(("🍎 Focus on healthy eating and nutrition", None))
+            scenarios.append((("leaf", "Focus on healthy eating and nutrition"), None))
         elif user_bmi >= 25 and user_bmi < 30:
             # Overweight - advise more physical activity
             active_normal_weight = comparison_profile[
@@ -731,9 +697,9 @@ with tab2:
             ]
             reductions = calculate_risk_reductions(active_normal_weight)
             if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0 or reductions['bmi'][0] > 0):
-                scenarios.append(("🏃 Be more physically active and achieve healthy weight (BMI <25)", reductions))
+                scenarios.append((("activity", "Be more active and reach a healthy weight (BMI < 25)"), reductions))
             else:
-                scenarios.append(("🏃 Be more physically active to reduce weight", None))
+                scenarios.append((("activity", "Be more physically active to reduce weight"), None))
         elif user_bmi >= 30:
             # Obese - advise weight loss
             healthy_bmi = comparison_profile[comparison_profile['BMI'] < 25]
@@ -744,7 +710,7 @@ with tab2:
                 healthy_bmi_fallback = age_filtered[age_filtered['BMI'] < 25]
                 reductions = calculate_risk_reductions(healthy_bmi_fallback)
             if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0 or reductions['bmi'][0] > 0):
-                scenarios.append(("⚖️ Achieved healthy weight (BMI <25)", reductions))
+                scenarios.append((("scale", "Reach a healthy weight (BMI < 25)"), reductions))
         
         # Scenario 4: Quit smoking (if currently smoking)
         if user_smoker == "Current":
@@ -755,39 +721,45 @@ with tab2:
                 nonsmoker_fallback = filtered_data[filtered_data['SmokerStatus'] == 0]
                 reductions = calculate_risk_reductions(nonsmoker_fallback)
             if reductions and (reductions['diabetes'][0] > 0 or reductions['heart'][0] > 0):
-                scenarios.append(("🚭 Quit smoking", reductions))
+                scenarios.append((("ban", "Quit smoking"), reductions))
         
         # Display scenarios
+        def scenario_card(icon_name, change, changes_html):
+            return f"""
+            <div class="hr-card" style="padding:16px;margin-bottom:10px;">
+                <div class="hr-row" style="align-items:center;">
+                    {ui.icon_badge(icon_name, ui.STATUS["LOW"][0], 38)}
+                    <div><div style="font-size:15px;font-weight:600;color:{ui.TEXT};">{change}</div>
+                    <div style="font-size:13.5px;color:{ui.TEXT_2};margin-top:4px;">{changes_html}</div></div>
+                </div>
+            </div>"""
+
         if scenarios:
-            for scenario in scenarios:
-                change = scenario[0]
-                reductions = scenario[1]
-                
+            for (icon_name, change), reductions in scenarios:
                 if reductions is None:
-                    # For advice without specific risk reduction (like underweight advice)
-                    st.info(f"**{change}** - This can help improve your overall health and reduce disease risk.")
-                else:
-                    # Build risk reduction message for all three metrics
-                    risk_changes = []
-                    
-                    if reductions['diabetes'][0] > 0:
-                        risk_changes.append(f"**Diabetes risk** drops from {your_diabetes_risk:.1f}% to {reductions['diabetes'][1]:.1f}% (-{reductions['diabetes'][0]:.1f}%)")
-                    
-                    if reductions['heart'][0] > 0:
-                        risk_changes.append(f"**Heart attack risk** drops from {your_heart_risk:.1f}% to {reductions['heart'][1]:.1f}% (-{reductions['heart'][0]:.1f}%)")
-                    
-                    if reductions['bmi'][0] > 0:
-                        risk_changes.append(f"**Obesity risk** drops from {your_bmi_risk:.1f} to {reductions['bmi'][1]:.1f} (-{reductions['bmi'][0]:.1f})")
-                    
-                    if risk_changes:
-                        st.success(f"**{change}** → " + " | ".join(risk_changes))
+                    st.markdown(scenario_card(icon_name, change,
+                                              "This can help improve your overall health and reduce disease risk."),
+                                unsafe_allow_html=True)
+                    continue
+
+                risk_changes = []
+                if reductions['diabetes'][0] > 0:
+                    risk_changes.append(f"Diabetes <b>{your_diabetes_risk:.1f}% → {reductions['diabetes'][1]:.1f}%</b>")
+                if reductions['heart'][0] > 0:
+                    risk_changes.append(f"Heart attack <b>{your_heart_risk:.1f}% → {reductions['heart'][1]:.1f}%</b>")
+                if reductions['bmi'][0] > 0:
+                    risk_changes.append(f"Weight risk score <b>{your_bmi_risk:.0f} → {reductions['bmi'][1]:.0f}</b>")
+                if risk_changes:
+                    st.markdown(scenario_card(icon_name, change, " &nbsp;·&nbsp; ".join(risk_changes)),
+                                unsafe_allow_html=True)
         else:
             # Only show positive message if user actually has good habits
             has_issues = (user_sleep < 7) or (user_active == "No") or (user_bmi < 18.5) or (user_bmi >= 25) or (user_smoker == "Current")
             if has_issues:
-                st.warning("⚠️ **Unable to calculate improvement scenarios** - Try adjusting your filters or check back with more data.")
+                st.warning("**Unable to calculate improvement scenarios.** Try adjusting your filters.", icon=":material/warning:")
             else:
-                st.info("🌟 **Great job!** You're already following healthy lifestyle habits. Keep it up!")
+                ui.callout("<b>Great job!</b> You're already following healthy lifestyle habits. Keep it up!",
+                           "check", ui.STATUS["LOW"][0])
 
 # ============================================================================
 # TAB 3: HEALTH PERSONAS (clustering)
@@ -801,9 +773,8 @@ with tab3:
 # ============================================================================
 
 with tab4:
-    st.header("🗺️ Geographic Health Patterns")
-    st.markdown("Compare health outcomes across different U.S. states")
-    
+    ui.section("Geographic health patterns", "Compare health outcomes across U.S. states", "map-pin")
+
     # Select condition to map
     condition_map = {
         'Diabetes': 'Diabetes_Binary',
@@ -812,178 +783,174 @@ with tab4:
         'Arthritis': 'HadArthritis',
         'Stroke': 'HadStroke'
     }
-    
+
     selected_condition = st.selectbox(
-        "Select Condition to Map", 
+        "Condition",
         list(condition_map.keys()),
         help="Choose a health condition to see state-by-state comparisons"
     )
-    
+
     # Calculate state-level prevalence
     state_prevalence = filtered_data.groupby('State')[condition_map[selected_condition]].mean() * 100
     state_prevalence = state_prevalence.reset_index()
     state_prevalence.columns = ['State', 'Prevalence']
     state_prevalence['State'] = state_prevalence['State'].str.title()
     state_prevalence = state_prevalence.sort_values('Prevalence', ascending=False)
-    
+
     if len(state_prevalence) == 0:
-        st.warning("No data available for the selected filters. Please adjust your filters.")
+        st.warning("No data available for the selected filters. Please adjust your filters.", icon=":material/warning:")
     else:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader(f"Highest {selected_condition} Rates")
-            st.caption("States with the highest prevalence")
-            top_15 = state_prevalence.head(15)
-            fig = px.bar(top_15, y='State', x='Prevalence', orientation='h',
-                         color='Prevalence', color_continuous_scale='Reds',
-                         text='Prevalence')
-            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig.update_layout(height=500, showlegend=False, 
-                            xaxis_title="Prevalence (%)",
-                            margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-        
-        with col2:
-            st.subheader(f"Lowest {selected_condition} Rates")
-            st.caption("States with the lowest prevalence")
-            bottom_15 = state_prevalence.tail(15)
-            fig = px.bar(bottom_15, y='State', x='Prevalence', orientation='h',
-                         color='Prevalence', color_continuous_scale='Greens',
-                         text='Prevalence')
-            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-            fig.update_layout(height=500, showlegend=False,
-                            xaxis_title="Prevalence (%)",
-                            margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-        
-        # Geographic insights
-        st.markdown("---")
+        highest_state = state_prevalence.iloc[0]
+        lowest_state = state_prevalence.iloc[-1]
+        gap = highest_state['Prevalence'] - lowest_state['Prevalence']
+
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            highest_state = state_prevalence.iloc[0]
-            st.metric("Highest State", 
-                     highest_state['State'], 
-                     f"{highest_state['Prevalence']:.1f}%")
-        
+            st.markdown(ui.stat_card("Highest", highest_state['State'], icon_name="trending-up",
+                                     note=f"{highest_state['Prevalence']:.1f}% {selected_condition.lower()} prevalence"),
+                        unsafe_allow_html=True)
         with col2:
-            lowest_state = state_prevalence.iloc[-1]
-            st.metric("Lowest State", 
-                     lowest_state['State'], 
-                     f"{lowest_state['Prevalence']:.1f}%")
-        
+            st.markdown(ui.stat_card("Lowest", lowest_state['State'], icon_name="trending-down",
+                                     note=f"{lowest_state['Prevalence']:.1f}% {selected_condition.lower()} prevalence"),
+                        unsafe_allow_html=True)
         with col3:
-            gap = highest_state['Prevalence'] - lowest_state['Prevalence']
-            st.metric("Geographic Gap", 
-                     f"{gap:.1f}",
-                     "percentage points")
+            st.markdown(ui.stat_card("Geographic gap", f"{gap:.1f} pts", icon_name="map-pin",
+                                     note="Difference between highest and lowest state"),
+                        unsafe_allow_html=True)
+
+        # Choropleth (50 states + DC; territories listed in the bar charts below)
+        map_df = state_prevalence.assign(Code=state_prevalence['State'].map(STATE_CODES)).dropna(subset=['Code'])
+        fig = go.Figure(go.Choropleth(
+            locations=map_df['Code'], z=map_df['Prevalence'], locationmode='USA-states',
+            text=map_df['State'],
+            colorscale=[[0, '#184f95'], [0.5, '#5598e7'], [1, '#cde2fb']],
+            marker_line_color=ui.BG, marker_line_width=1,
+            colorbar=dict(title=dict(text="%", side='top'), thickness=12, len=0.7, outlinewidth=0,
+                          tickfont=dict(color=ui.TEXT_2)),
+            hovertemplate='<b>%{text}</b><br>%{z:.1f}% ' + selected_condition.lower() + '<extra></extra>'
+        ))
+        fig.update_layout(
+            geo=dict(scope='usa', bgcolor='rgba(0,0,0,0)', lakecolor='rgba(0,0,0,0)',
+                     showlakes=False, landcolor=ui.SURFACE_2),
+            height=520, margin=dict(l=0, r=0, t=10, b=0), dragmode=False
+        )
+        ui.chart(fig)
+        st.caption("Lighter states have higher prevalence. Hover a state for its rate.")
+
+        col1, col2 = st.columns(2)
+        for col, title, data in [(col1, "Highest 15", state_prevalence.head(15)),
+                                 (col2, "Lowest 15", state_prevalence.tail(15))]:
+            with col:
+                st.subheader(f"{title}: {selected_condition.lower()}")
+                fig = go.Figure(go.Bar(
+                    x=data['Prevalence'], y=data['State'], orientation='h',
+                    marker_color=ui.SERIES[0],
+                    text=[f"{v:.1f}%" for v in data['Prevalence']], textposition='outside', cliponaxis=False,
+                    hovertemplate='%{y}: %{x:.1f}%<extra></extra>'
+                ))
+                fig.update_layout(height=500, xaxis_title="Prevalence (%)",
+                                  yaxis=dict(autorange='reversed'), margin=dict(l=20, r=40, t=10, b=20))
+                ui.chart(fig)
 
 # ============================================================================
 # TAB 5: TRENDS
 # ============================================================================
 
 with tab5:
-    st.header("📈 Age & Lifestyle Trends")
-    st.markdown("Explore how health metrics change across different age groups")
-    
+    ui.section("Age & lifestyle trends", "How health metrics change across age groups", "trending-up")
+
     # Select metric to visualize
     trend_metric = st.selectbox(
-        "Select Metric",
+        "Metric",
         ['Diabetes', 'Heart Attack', 'Depression', 'Average BMI', 'Physical Activity', 'Sleep Hours'],
         help="Choose a health metric to see how it varies by age"
     )
-    
+
     # Calculate trend data
     if trend_metric == 'Diabetes':
         trend_data = filtered_data.groupby('AgeCategory')['Diabetes_Binary'].mean() * 100
-        ylabel = "Diabetes Prevalence (%)"
+        ylabel = "Diabetes prevalence (%)"
     elif trend_metric == 'Heart Attack':
         trend_data = filtered_data.groupby('AgeCategory')['HadHeartAttack'].mean() * 100
-        ylabel = "Heart Attack Prevalence (%)"
+        ylabel = "Heart attack prevalence (%)"
     elif trend_metric == 'Depression':
         trend_data = filtered_data.groupby('AgeCategory')['HadDepressiveDisorder'].mean() * 100
-        ylabel = "Depression Prevalence (%)"
+        ylabel = "Depression prevalence (%)"
     elif trend_metric == 'Average BMI':
         trend_data = filtered_data.groupby('AgeCategory')['BMI'].mean()
         ylabel = "Average BMI"
     elif trend_metric == 'Physical Activity':
         trend_data = filtered_data.groupby('AgeCategory')['PhysicalActivities'].mean() * 100
-        ylabel = "% Physically Active"
+        ylabel = "% physically active"
     else:  # Sleep Hours
         trend_data = filtered_data.groupby('AgeCategory')['SleepHours'].mean()
-        ylabel = "Average Sleep Hours"
-    
+        ylabel = "Average sleep (hours)"
+
     # Plot
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=age_labels,
+        x=[age_labels[int(i)] for i in trend_data.index],
         y=trend_data.values,
         mode='lines+markers',
-        line=dict(width=3, color='#3498db'),
-        marker=dict(size=10),
+        line=dict(width=2, color=ui.SERIES[0], shape='spline', smoothing=0.6),
+        marker=dict(size=8, color=ui.SERIES[0], line=dict(color=ui.BG, width=2)),
         fill='tozeroy',
-        fillcolor='rgba(52, 152, 219, 0.2)',
-        name=trend_metric
+        fillcolor=ui.rgba(ui.SERIES[0], 0.12),
+        name=trend_metric,
+        hovertemplate='%{x}: %{y:.1f}<extra></extra>'
     ))
-    
+
     fig.update_layout(
-        xaxis_title="Age Group",
+        xaxis_title="Age group",
         yaxis_title=ylabel,
-        height=500,
-        hovermode='x unified',
+        height=460,
+        hovermode='x',
         margin=dict(l=20, r=20, t=20, b=20)
     )
-    
-    st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-    
+
+    ui.chart(fig)
+
     # Comparative analysis
-    st.markdown("---")
-    st.subheader("Lifestyle Impact Comparison")
-    st.caption("See how lifestyle factors relate to health outcomes")
-    
+    st.subheader("Lifestyle impact")
+    st.caption("How lifestyle factors relate to health outcomes")
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         # BMI vs Diabetes
-        bmi_categories = ['Underweight', 'Normal', 'Overweight', 'Obese', 'Severe Obese']
-        diabetes_by_bmi = filtered_data.groupby('BMI_Category')['Diabetes_Binary'].mean() * 100
-        
-        fig = px.bar(x=bmi_categories, y=diabetes_by_bmi.values,
-                    labels={'x': 'BMI Category', 'y': 'Diabetes Prevalence (%)'},
-                    title='BMI → Diabetes Risk',
-                    color=diabetes_by_bmi.values,
-                    color_continuous_scale='Reds')
-        fig.update_layout(showlegend=False, height=400,
-                         margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
-    
+        st.markdown("**Diabetes by BMI category**")
+        diabetes_by_bmi = filtered_data.groupby('BMI_Category', observed=False)['Diabetes_Binary'].mean() * 100
+        fig = go.Figure(go.Bar(x=diabetes_by_bmi.index.astype(str), y=diabetes_by_bmi.values,
+                               marker_color=ui.SERIES[0],
+                               text=[f"{v:.1f}%" for v in diabetes_by_bmi.values], textposition='outside',
+                               cliponaxis=False, hovertemplate='%{x}: %{y:.1f}%<extra></extra>'))
+        fig.update_layout(
+                          xaxis_title="BMI category", yaxis_title="Diabetes prevalence (%)",
+                          height=400, margin=dict(l=20, r=20, t=40, b=20))
+        ui.chart(fig)
+
     with col2:
         # Sleep vs Depression
-        sleep_categories = ['<5 hrs', '5-6 hrs', '7-8 hrs', '>9 hrs']
-        depression_by_sleep = filtered_data.groupby('Sleep_Category')['HadDepressiveDisorder'].mean() * 100
-        
-        fig = px.bar(x=sleep_categories, y=depression_by_sleep.values,
-                    labels={'x': 'Sleep Category', 'y': 'Depression Prevalence (%)'},
-                    title='Sleep → Mental Health',
-                    color=depression_by_sleep.values,
-                    color_continuous_scale='Purples')
-        fig.update_layout(showlegend=False, height=400,
-                         margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
+        st.markdown("**Depression by nightly sleep**")
+        depression_by_sleep = filtered_data.groupby('Sleep_Category', observed=False)['HadDepressiveDisorder'].mean() * 100
+        fig = go.Figure(go.Bar(x=depression_by_sleep.index.astype(str), y=depression_by_sleep.values,
+                               marker_color=ui.SERIES[0],
+                               text=[f"{v:.1f}%" for v in depression_by_sleep.values], textposition='outside',
+                               cliponaxis=False, hovertemplate='%{x}: %{y:.1f}%<extra></extra>'))
+        fig.update_layout(
+                          xaxis_title="Sleep", yaxis_title="Depression prevalence (%)",
+                          height=400, margin=dict(l=20, r=20, t=40, b=20))
+        ui.chart(fig)
 
 # ============================================================================
 # FOOTER
 # ============================================================================
 
-st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: left; color: #666; padding: 20px;'>
-    <p><strong>📊 Data Source:</strong> CDC BRFSS 2022 Survey (445,132 original respondents; 246,022 complete rows after cleaning)</p>
-    <p><strong>⚠️ Disclaimer:</strong> For educational purposes only. Not medical advice. Always consult healthcare professionals for medical decisions.</p>
-    <p style='font-size: 0.9em; margin-top: 10px;'>This dashboard compares your profile to similar individuals in the dataset to provide risk estimates.</p>
-    </div>
-    """,
-    unsafe_allow_html=True
+ui.footer(
+    f"{ui.icon('database', 15)} <b>Data:</b> CDC BRFSS 2022 survey (445,132 original respondents; "
+    "246,022 complete rows after cleaning)<br>"
+    f"{ui.icon('info', 15)} <b>Disclaimer:</b> For educational purposes only. Not medical advice. "
+    "Always consult healthcare professionals for medical decisions.<br>"
+    "Built by <b>Ayomide Isinkaye</b> · "
+    "<a href='https://github.com/avisink/Health_ML_Project' style='color:#be96e3;'>Source on GitHub</a>"
 )

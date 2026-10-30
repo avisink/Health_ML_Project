@@ -26,6 +26,8 @@ import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import CLUSTERED_DATA, RANDOM_STATE
+from app import ui
+from app.ui import chart, icon, icon_badge, rgba
 
 # Same features (and order) as src/clustering.py select_features()
 CLUSTER_FEATURES = [
@@ -56,52 +58,44 @@ FEATURE_LABELS = {
 AGE_LABELS = ["18-24", "25-29", "30-34", "35-39", "40-44", "45-49",
               "50-54", "55-59", "60-64", "65-69", "70-74", "75-79", "80+"]
 
-# Categorical palette (dark-surface steps), assigned to cluster ids in fixed order
-PERSONA_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500',
-                  '#d55181', '#008300', '#9085e9', '#e66767']
+# Categorical palette, assigned to cluster ids in fixed order
+PERSONA_COLORS = ui.SERIES
 # Secondary encoding so identity never relies on color alone
 PERSONA_SYMBOLS = ['circle', 'square', 'diamond', 'triangle-up',
                    'pentagon', 'hexagon', 'triangle-down', 'cross']
 
 # Names written from outputs/reports/cluster_profiles.csv (re-check if clustering is re-run)
 PERSONAS = {
-    0: ("🩹", "High Symptom Burden",
+    0: ("thermometer", "High Symptom Burden",
         "About 26 physically unwell days a month, the lowest self-rated health, and the "
         "least active group (42%). Diabetes and depression are both above average."),
-    1: ("🧠", "Mental Health Focus",
+    1: ("brain", "Mental Health Focus",
         "Nearly everyone here has a depression diagnosis, with about 10 mentally unwell "
         "days a month, yet most stay physically active."),
-    2: ("🩺", "Overdue for a Checkup",
+    2: ("stethoscope", "Overdue for a Checkup",
         "Younger and generally healthy, but most haven't seen a doctor in 2+ years "
         "and few got a flu shot."),
-    3: ("🌱", "Healthy, Skipping the Flu Shot",
+    3: ("leaf", "Healthy, Skipping the Flu Shot",
         "Active, good self-rated health, very few chronic conditions, and no flu "
         "vaccine in the past year."),
-    4: ("🩸", "Managing Diabetes",
+    4: ("droplet", "Managing Diabetes",
         "Older with the highest average BMI. Almost all have diabetes, and they "
         "keep up with regular checkups."),
-    5: ("⭐", "Thriving & Engaged",
+    5: ("sun", "Thriving & Engaged",
         "The largest group. Active, healthy, the fewest smokers, and everyone "
         "got a flu shot this year."),
-    6: ("❤️", "Heart Attack Survivors",
+    6: ("heart-pulse", "Heart Attack Survivors",
         "The oldest group, and every member has had a heart attack. More smokers, "
         "less activity, and about 9 physically unwell days a month."),
 }
 
-PLOTLY_CONFIG = {
-    "displayModeBar": True,
-    "modeBarButtonsToAdd": ["resetScale2d"],
-    "displaylogo": False,
-    "responsive": True
-}
-
-CARD_STYLE = ("background-color: rgba(38, 39, 48, 0.6); padding: 20px; border-radius: 12px; "
-              "border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);")
+def persona(cid):
+    """(icon name, display name, description) for a cluster id."""
+    return PERSONAS.get(cid, ("layers", f"Persona {cid}", ""))
 
 
 def persona_name(cid):
-    emoji, name, _ = PERSONAS.get(cid, ("📊", f"Persona {cid}", ""))
-    return f"{emoji} {name}"
+    return persona(cid)[1]
 
 
 def persona_color(cid):
@@ -241,7 +235,8 @@ def profile_form():
             depression = st.radio("Ever diagnosed with depression?", ["No", "Yes"],
                                   horizontal=True, key="p_depression")
 
-        st.form_submit_button("🔎 Find my persona", type="primary", use_container_width=True)
+        st.form_submit_button("Find my persona", icon=":material/person_search:", type="primary",
+                              use_container_width=True)
 
     yes = {"Yes": 1, "No": 0}
     return {
@@ -263,20 +258,26 @@ def profile_form():
 
 
 def hero_card(cid, closeness, share):
-    emoji, name, desc = PERSONAS.get(cid, ("📊", f"Persona {cid}", ""))
+    icon_name, name, desc = persona(cid)
     color = persona_color(cid)
     return f"""
-    <div style="{CARD_STYLE} border-left: 6px solid {color}; margin-bottom: 16px;">
-        <div style="font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #b0b0b0;">
-            Your closest health persona
+    <div class="hr-card" style="padding:26px;margin-bottom:18px;border-color:{rgba(color, 0.45)};
+         background: linear-gradient(120deg, {rgba(color, 0.18)}, {ui.SURFACE} 60%);">
+        <div class="hr-row" style="align-items:center;gap:18px;flex-wrap:wrap;">
+            {icon_badge(icon_name, color, 64)}
+            <div style="flex:1;min-width:220px;">
+                <div class="hr-eyebrow">Your closest health persona</div>
+                <div style="font-family:'Playfair Display',Georgia,serif;font-size:32px;font-weight:700;
+                            color:{ui.TEXT};line-height:1.15;margin-top:4px;">{name}</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:30px;font-weight:600;color:{ui.TEXT};">{closeness:.0f}%</div>
+                <div style="font-size:12.5px;color:{ui.MUTED};">relative closeness</div>
+            </div>
         </div>
-        <div style="display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 6px;">
-            <span style="font-size: 30px; font-weight: 700; color: #ffffff;">{emoji} {name}</span>
-            <span style="font-size: 15px; color: #e0e0e0;"><b>{closeness:.0f}%</b> relative closeness</span>
-        </div>
-        <div style="font-size: 15px; color: #d0d0d0; margin-top: 10px; line-height: 1.5;">{desc}</div>
-        <div style="font-size: 13px; color: #b0b0b0; margin-top: 10px;">
-            {share:.1f}% of the 246,000+ survey respondents belong to this persona.
+        <div style="font-size:15.5px;color:{ui.TEXT_2};margin-top:16px;line-height:1.55;">{desc}</div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:13px;color:{ui.MUTED};margin-top:12px;">
+            {icon('users', 15)} {share:.1f}% of the 246,000+ survey respondents share this persona
         </div>
     </div>
     """
@@ -287,20 +288,21 @@ def persona_gallery(model):
     sizes = model['sizes']
     cards = []
     for cid in model['cluster_ids']:
-        emoji, name, desc = PERSONAS.get(int(cid), ("📊", f"Persona {cid}", ""))
+        icon_name, name, desc = persona(int(cid))
+        color = persona_color(int(cid))
         pct = sizes[cid] / model['n'] * 100
         cards.append(f"""
-        <div style="{CARD_STYLE} padding: 14px; border-top: 4px solid {persona_color(int(cid))};">
-            <div style="font-size: 22px;">{emoji}</div>
-            <div style="font-size: 15px; font-weight: 600; color: #ffffff; margin: 4px 0;">{name}</div>
-            <div style="font-size: 12px; color: #b0b0b0; margin-bottom: 6px;">{pct:.1f}% of respondents</div>
-            <div style="font-size: 12.5px; color: #d0d0d0; line-height: 1.4;">{desc}</div>
+        <div class="hr-card" style="padding:16px;">
+            <div class="hr-row" style="align-items:center;justify-content:space-between;">
+                {icon_badge(icon_name, color, 40)}
+                <span style="font-size:13px;font-weight:600;color:{ui.TEXT_2};">{pct:.1f}%</span>
+            </div>
+            <div style="font-size:15px;font-weight:600;color:{ui.TEXT};margin:12px 0 4px;">{name}</div>
+            <div class="hr-meter" style="height:4px;margin-bottom:10px;">
+                <div style="width:{pct * model['n'] / sizes.max():.1f}%;background:{color};"></div></div>
+            <div style="font-size:13px;color:{ui.TEXT_2};line-height:1.45;">{desc}</div>
         </div>""")
-    st.markdown(
-        f"""<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-                        gap: 12px; margin-bottom: 8px;">{''.join(cards)}</div>""",
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="hr-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 def radar_chart(model, user_values, cid):
@@ -320,9 +322,9 @@ def radar_chart(model, user_values, cid):
 
     theta = [FEATURE_LABELS[a] for a in axes] + [FEATURE_LABELS[axes[0]]]
     series = [
-        ("Everyone", norm(population_raw[idx]), '#898781', 'dot', None),
+        ("Everyone", norm(population_raw[idx]), ui.MUTED, 'dot', None),
         (persona_name(cid), norm(centroid_raw[idx]), persona_color(cid), 'solid', persona_color(cid)),
-        ("You", norm([user_values[a] for a in axes]), '#f0efec', 'solid', None),
+        ("You", norm([user_values[a] for a in axes]), ui.TEXT, 'solid', None),
     ]
 
     fig = go.Figure()
@@ -332,13 +334,13 @@ def radar_chart(model, user_values, cid):
             line=dict(color=color, width=2, dash=dash),
             marker=dict(size=8),
             fill='toself' if fill else None,
-            fillcolor=f"rgba{tuple(int(fill[i:i + 2], 16) for i in (1, 3, 5)) + (0.18,)}" if fill else None,
+            fillcolor=rgba(fill, 0.18) if fill else None,
             hovertemplate='%{theta}: %{r:.2f}<extra>' + name + '</extra>'
         ))
     fig.update_layout(
         polar=dict(bgcolor='rgba(0,0,0,0)',
-                   radialaxis=dict(range=[0, 1], showticklabels=False, gridcolor='#383835', linecolor='#383835'),
-                   angularaxis=dict(gridcolor='#383835', linecolor='#383835')),
+                   radialaxis=dict(range=[0, 1], showticklabels=False, gridcolor=ui.GRID, linecolor=ui.GRID),
+                   angularaxis=dict(gridcolor=ui.GRID, linecolor=ui.GRID, tickfont=dict(color=ui.TEXT_2))),
         legend=dict(orientation='h', yanchor='bottom', y=-0.2, xanchor='center', x=0.5),
         height=440, margin=dict(l=40, r=40, t=30, b=40)
     )
@@ -396,18 +398,16 @@ def persona_map(model, user_scaled, cid, dims=2):
         user_coords['z'] = [user_pc[2]]
 
     fig.add_trace(scatter(
-        **centroid_coords, mode='markers+text' if dims == 2 else 'markers', name='Persona centers',
-        text=[PERSONAS.get(int(c), ("📊",))[0] for c in ids], textposition='top center',
-        textfont=dict(size=18),
-        marker=dict(size=16 if dims == 2 else 8, color=[persona_color(int(c)) for c in ids],
-                    line=dict(color='#f0efec', width=2)),
+        **centroid_coords, mode='markers', name='Persona centers',
+        marker=dict(size=18 if dims == 2 else 8, color=[persona_color(int(c)) for c in ids],
+                    line=dict(color=ui.TEXT, width=2)),
         hovertext=[persona_name(int(c)) + ' (center)' for c in ids], hoverinfo='text'
     ))
     fig.add_trace(scatter(
         **user_coords, mode='markers+text', name='You', text=['You'], textposition='bottom center',
-        textfont=dict(size=14, color='#f0efec'),
+        textfont=dict(size=14, color=ui.TEXT),
         marker=dict(size=24 if dims == 2 else 10, symbol='star' if dims == 2 else 'diamond',
-                    color='#f0efec', line=dict(color=persona_color(cid), width=3)),
+                    color=ui.TEXT, line=dict(color=persona_color(cid), width=3)),
         hovertemplate='You → ' + persona_name(cid) + '<extra></extra>'
     ))
 
@@ -444,7 +444,7 @@ def centroid_heatmap(model):
     limit = float(np.abs(z).max())
     fig = go.Figure(go.Heatmap(
         z=z.T, x=names, y=labels, zmid=0, zmin=-limit, zmax=limit,
-        colorscale=[[0, '#2a78d6'], [0.5, '#383835'], [1, '#e34948']],
+        colorscale=[[0, '#3987e5'], [0.5, '#2e2236'], [1, '#e66767']],
         text=np.round(z.T, 2), texttemplate='%{text}', textfont=dict(size=11),
         xgap=2, ygap=2,
         colorbar=dict(title='z-score'),
@@ -462,7 +462,7 @@ def silhouette_chart(model):
         vals = model['sample_silhouette'][model['sample_labels'] == c]
         fig.add_trace(go.Box(x=vals, name=persona_name(int(c)), marker_color=persona_color(int(c)),
                              boxmean=True, orientation='h', showlegend=False))
-    fig.add_vline(x=0, line=dict(color='#898781', width=1, dash='dot'))
+    fig.add_vline(x=0, line=dict(color=ui.MUTED, width=1, dash='dot'))
     fig.update_layout(height=420, xaxis_title="Silhouette coefficient",
                       margin=dict(l=10, r=20, t=10, b=40))
     return fig
@@ -503,7 +503,7 @@ def render_data_science(model, user_scaled, distances, cid):
     c3.metric("Silhouette", f"{m['silhouette']:.3f}", help="Mean over an 8,000-row random sample. Range -1 to 1, higher is better.")
     c4.metric("Davies-Bouldin", f"{m['davies_bouldin']:.2f}", help="Lower is better. Same 8,000-row sample.")
 
-    with st.expander("⚙️ Pipeline", expanded=False):
+    with st.expander("Pipeline details", expanded=False, icon=":material/account_tree:"):
         st.markdown(f"""
         1. **Features (14):** {', '.join(FEATURE_LABELS[f] for f in CLUSTER_FEATURES)}
         2. **Preprocessing:** median imputation, then `StandardScaler` (z-scores)
@@ -517,27 +517,27 @@ def render_data_science(model, user_scaled, distances, cid):
     st.subheader("Centroid fingerprint")
     st.caption("Each cell is how far a persona's average sits from the overall average, in standard deviations. "
                "Red = above average, blue = below.")
-    st.plotly_chart(centroid_heatmap(model), use_container_width=True, config=PLOTLY_CONFIG)
+    chart(centroid_heatmap(model))
 
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Silhouette by persona")
         st.caption("How well each sampled respondent fits its own cluster vs. the next-closest one. "
                    "Values near 0 mean the boundary between personas is fuzzy.")
-        st.plotly_chart(silhouette_chart(model), use_container_width=True, config=PLOTLY_CONFIG)
+        chart(silhouette_chart(model))
     with col2:
         st.subheader("What drives the map axes")
         var = model['pca'].explained_variance_ratio_
         st.caption(f"PCA loadings. PC1 and PC2 together explain {var[:2].sum():.0%} of the variance, "
                    "so the 2-D map is a simplification. Overlap there doesn't always mean overlap in 14-D.")
-        st.plotly_chart(loadings_chart(model), use_container_width=True, config=PLOTLY_CONFIG)
+        chart(loadings_chart(model))
 
     st.subheader("Your distance breakdown")
     col1, col2 = st.columns([3, 2])
     with col1:
         st.caption(f"Which of your answers pull you away from the {persona_name(cid)} center. "
                    "The bars sum to your squared Euclidean distance.")
-        st.plotly_chart(distance_contributions(model, user_scaled, cid), use_container_width=True, config=PLOTLY_CONFIG)
+        chart(distance_contributions(model, user_scaled, cid))
     with col2:
         st.caption("Your Euclidean distance to every centroid (scaled space)")
         dist_df = pd.DataFrame({
@@ -551,12 +551,13 @@ def render_data_science(model, user_scaled, distances, cid):
     st.dataframe(stats.style.format(precision=1), use_container_width=True)
     st.download_button("⬇️ Download profiles (CSV)", stats.to_csv().encode(), "persona_profiles.csv", "text/csv")
 
-    st.info(
-        "**Caveats worth knowing.** The silhouette score is low, so these personas are useful summaries rather "
+    ui.callout(
+        "<b>Caveats worth knowing.</b> The silhouette score is low, so these personas are useful summaries rather "
         "than sharply separated groups. Because binary diagnosis flags (heart attack, depression, diabetes) are "
         "standardised alongside continuous features, a single yes/no can move someone several standard "
         "deviations, so three personas are largely defined by one diagnosis. Re-weighting those flags, "
-        "or clustering on behaviour only and profiling outcomes afterwards, would be a good next experiment."
+        "or clustering on behaviour only and profiling outcomes afterwards, would be a good next experiment.",
+        "alert", ui.STATUS['MODERATE'][0]
     )
 
 
@@ -565,15 +566,15 @@ def render_data_science(model, user_scaled, distances, cid):
 # ============================================================================
 
 def render_cluster_tab():
-    st.header("🧬 Health Personas")
-    st.markdown("Machine learning (KMeans clustering) grouped 246,000+ Americans into **health personas**: "
-                "people with similar habits, wellbeing, and health history. Tell us about yourself to see which one "
-                "you're closest to.")
+    ui.section("Health personas",
+               "KMeans clustering grouped 246,000+ Americans into seven personas with similar habits, "
+               "wellbeing, and health history. Tell us about yourself to see which one you're closest to.",
+               "layers")
 
     with st.spinner("Loading clustering model..."):
         model = build_model()
 
-    with st.expander("👀 Meet the personas", expanded=False):
+    with st.expander("Meet the seven personas", expanded=False, icon=":material/groups:"):
         persona_gallery(model)
 
     user_values = profile_form()
@@ -581,7 +582,8 @@ def render_cluster_tab():
     best_pos = list(model['cluster_ids']).index(cid)
     share = model['sizes'][cid] / model['n'] * 100
 
-    view_you, view_map, view_ds = st.tabs(["✨ Your persona", "🗺️ Persona map", "🔬 Under the hood"])
+    view_you, view_map, view_ds = st.tabs([":material/person: Your persona", ":material/scatter_plot: Persona map",
+                                           ":material/science: Under the hood"])
 
     with view_you:
         st.markdown(hero_card(cid, closeness[best_pos], share), unsafe_allow_html=True)
@@ -590,22 +592,23 @@ def render_cluster_tab():
         with col1:
             st.subheader("You vs. your persona")
             st.caption("Each axis is scaled from its minimum to maximum possible value.")
-            st.plotly_chart(radar_chart(model, user_values, cid), use_container_width=True, config=PLOTLY_CONFIG)
+            chart(radar_chart(model, user_values, cid))
         with col2:
             st.subheader("How close you are to each persona")
             st.caption("Your answers can resemble several personas. Here's how close you are to each one.")
-            st.plotly_chart(closeness_chart(model, closeness, cid), use_container_width=True, config=PLOTLY_CONFIG)
+            chart(closeness_chart(model, closeness, cid))
 
         st.markdown("**Where you differ most from this persona**")
         diff_cols = st.columns(3)
         for col, (feature, d) in zip(diff_cols, biggest_differences(model, user_scaled, cid)):
             direction = "higher" if d > 0 else "lower"
             col.markdown(
-                f"""<div style="{CARD_STYLE} padding: 14px;">
-                    <div style="font-size: 14px; color: #ffffff; font-weight: 600;">{FEATURE_LABELS[feature]}</div>
-                    <div style="font-size: 13px; color: #b0b0b0; margin-top: 4px;">
-                        Yours is <b style="color:#ffffff;">{direction}</b> than this persona's average
-                        by {abs(d):.1f} standard deviations
+                f"""<div class="hr-card" style="padding:16px;">
+                    <div class="hr-row" style="align-items:center;">
+                        {icon_badge('trending-up' if d > 0 else 'trending-down', ui.ACCENT, 34)}
+                        <div><div style="font-size:14.5px;color:{ui.TEXT};font-weight:600;">{FEATURE_LABELS[feature]}</div>
+                        <div style="font-size:13px;color:{ui.TEXT_2};margin-top:2px;">
+                            {abs(d):.1f} std <b>{direction}</b> than this persona's average</div></div>
                     </div></div>""",
                 unsafe_allow_html=True
             )
@@ -614,9 +617,8 @@ def render_cluster_tab():
         st.subheader("Where you sit among everyone")
         dims = st.radio("View", ["2D", "3D"], horizontal=True, key="persona_map_dims")
         st.caption("Each dot is a real survey respondent (random sample of 8,000), projected from 14 dimensions down "
-                   "with PCA. Large outlined markers are persona centers; the ⭐ is you. Click legend items to hide personas.")
-        st.plotly_chart(persona_map(model, user_scaled, cid, dims=3 if dims == "3D" else 2),
-                        use_container_width=True, config=PLOTLY_CONFIG)
+                   "with PCA. Large outlined markers are persona centers; the star is you. Click legend items to hide personas.")
+        chart(persona_map(model, user_scaled, cid, dims=3 if dims == "3D" else 2))
 
     with view_ds:
         render_data_science(model, user_scaled, distances, cid)
