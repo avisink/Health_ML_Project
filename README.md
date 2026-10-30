@@ -2,6 +2,16 @@
 
 **Predicting disease risk and discovering hidden health patterns**
 
+### 🔗 [Live app → avisink-health-analysis-with-ml.streamlit.app](https://avisink-health-analysis-with-ml.streamlit.app/)
+
+An interactive Streamlit dashboard built on the CDC BRFSS 2022 survey (246,022 respondents after cleaning):
+
+- **📊 Overview:** disease prevalence and lifestyle patterns for any filtered population
+- **🎯 Risk Calculator:** compare your profile to similar respondents and see "what if" lifestyle scenarios
+- **🧬 Health Personas:** find the ML cluster you're closest to, see yourself on a PCA map, and dig into the model
+- **🗺️ Geographic:** state-by-state comparisons
+- **📈 Trends:** how health changes with age
+
 ## 🚀 Quick Start
 
 ```bash
@@ -14,7 +24,7 @@ python src/clustering.py
 python src/modeling.py
 
 # Launch app
-streamlit run app/app.py
+streamlit run app/dashboard.py
 ```
 
 ## 📊 Project Structure
@@ -24,39 +34,46 @@ streamlit run app/app.py
 ├── src/               # Source code
 ├── models/            # Trained models
 ├── outputs/           # Results
-├── app/               # Streamlit app
+├── app/               # Streamlit app (dashboard.py, cluster_explorer.py)
 └── notebooks/         # Analysis notebooks
 ```
 
 ## 🔬 Clustering: Health Persona Discovery
 
 ### Overview
-Unsupervised learning pipeline to discover distinct health personas from behavioral and lifestyle patterns. Focuses on **preventive health** by identifying modifiable risk factors rather than disease outcomes.
+Unsupervised learning (`src/clustering.py`) groups respondents into **health personas** from 14 features:
+age, BMI, sleep, physical activity, smoking, alcohol, self-rated health, physically/mentally unwell days,
+time since last checkup, flu shot, and diabetes / heart attack / depression history.
 
-### Key Features
-- **11 Behavioral Features**: Demographics, lifestyle factors (BMI, sleep, physical activity, smoking, alcohol), health engagement, and self-reported health status
-- **Advanced Preprocessing**: 
-  - PCA dimensionality reduction (14 components explaining 96.9% variance)
-  - Yeo-Johnson power transformation for skewed features
-  - Variance-based feature selection
-- **Multi-Algorithm Clustering**: KMeans with automatic memory optimization for large datasets (246k+ samples)
-- **Comprehensive Evaluation**: Silhouette Score (0.1202), Calinski-Harabasz, and Davies-Bouldin metrics
-- **Optimal K Selection**: Automated selection of K=6 clusters via exhaustive search (K=3-7)
+### Method
+- Median imputation → `StandardScaler`
+- `KMeans`, with K chosen by best silhouette score over K=3–8 → **K=7**
+- Silhouette ≈ 0.13 (8k-row sample), Davies-Bouldin ≈ 1.94
 
-### Results
-- **Best Configuration**: KMeans with K=6 clusters
-- **Silhouette Score**: 0.1202 (improved from initial 0.097-0.104)
-- **Dataset**: 246,022 samples processed
-- **Outputs**: Cluster profiles, radar charts, geographic heatmaps, saved models
+### The personas
+| | Persona | Share | What defines it |
+|---|---|---|---|
+| 🩹 | High Symptom Burden | 8% | ~26 physically unwell days/month, lowest self-rated health, least active |
+| 🧠 | Mental Health Focus | 13% | ~99% depression diagnosis, but mostly still active |
+| 🩺 | Overdue for a Checkup | 9% | Younger, healthy, no checkup in 2+ years |
+| 🌱 | Healthy, Skipping the Flu Shot | 25% | Active, healthy, no flu vaccine |
+| 🩸 | Managing Diabetes | 10% | Older, highest BMI, ~96% diabetes |
+| ⭐ | Thriving & Engaged | 29% | Active, healthy, fewest smokers, all vaccinated |
+| ❤️ | Heart Attack Survivors | 5% | Oldest; all have had a heart attack |
+
+### In the app (🧬 Health Personas tab)
+- **Your persona:** enter your profile and get matched to the nearest centroid (same rule as `KMeans.predict`), with a radar chart of you vs. your persona vs. everyone and a closeness score for every persona
+- **Persona map:** 2D/3D PCA projection of 8,000 respondents with persona centers and a ⭐ for you
+- **Under the hood:** centroid z-score heatmap, per-cluster silhouette distributions, PCA loadings, your per-feature distance breakdown, and downloadable profiles
+
+### Known limitations
+Binary diagnosis flags are standardised alongside continuous features, so a single yes/no can dominate distance.
+Three personas are largely defined by one diagnosis, and the low silhouette means boundaries are fuzzy.
 
 ### Output Files
-- `outputs/figures/optimal_k.png` - K selection visualization
-- `outputs/figures/cluster_radar_charts.png` - Cluster profile comparisons
-- `outputs/figures/cluster_by_state_heatmap.png` - Geographic distribution
-- `data/processed/heart_with_clusters.csv` - Dataset with cluster assignments
-- `models/kmeans_model.pkl` - Trained clustering model
-- `models/pca_model.pkl` - PCA transformer
-- `models/model_scaler.pkl` - Feature scaler
+- `data/processed/heart_with_clusters.csv`: dataset with cluster assignments (used by the app)
+- `outputs/reports/cluster_profiles.csv`: per-cluster summary stats
+- `outputs/presentation_visuals/`: static charts from `src/simple_analysis.py`
 
 ## 📝 TODO
 
@@ -64,7 +81,8 @@ Unsupervised learning pipeline to discover distinct health personas from behavio
 - [x] Run cleaning pipeline
 - [x] Implement clustering pipeline
 - [ ] Train prediction models
-- [ ] Test Streamlit app
+- [x] Build & deploy Streamlit app
+- [x] Interactive cluster / persona explorer
 - [ ] Create presentation
 
 ## 👤 Author

@@ -16,6 +16,7 @@ import sys
 # Add project root to path
 sys.path.append(str(Path(__file__).parent.parent))
 from src.config import CLEANED_HEART_DATA, RANDOM_STATE
+from app.cluster_explorer import render_cluster_tab
 
 # PAGE CONFIG
 
@@ -115,8 +116,9 @@ with st.expander("ℹ️ **Getting Started - Click to expand**", expanded=False)
     **How to use:**
     1. **📊 Overview Tab**: Start here to see disease prevalence and lifestyle patterns
     2. **🎯 Risk Calculator**: Enter your profile to see personalized risk estimates
-    3. **🗺️ Geographic Tab**: Compare health outcomes across U.S. states
-    4. **📈 Trends Tab**: Explore how health changes with age
+    3. **🧬 Health Personas**: Find the health persona (ML cluster) you're closest to
+    4. **🗺️ Geographic Tab**: Compare health outcomes across U.S. states
+    5. **📈 Trends Tab**: Explore how health changes with age
     
     **Tips:**
     - Use the filters below to focus on specific populations
@@ -266,7 +268,7 @@ if len(filtered_data) == 0:
     st.stop()
 
 # Create tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "🎯 Risk Calculator", "🗺️ Geographic", "📈 Trends"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "🎯 Risk Calculator", "🧬 Health Personas", "🗺️ Geographic", "📈 Trends"])
 
 # TAB 1: OVERVIEW
 
@@ -788,10 +790,17 @@ with tab2:
                 st.info("🌟 **Great job!** You're already following healthy lifestyle habits. Keep it up!")
 
 # ============================================================================
-# TAB 3: GEOGRAPHIC
+# TAB 3: HEALTH PERSONAS (clustering)
 # ============================================================================
 
 with tab3:
+    render_cluster_tab()
+
+# ============================================================================
+# TAB 4: GEOGRAPHIC
+# ============================================================================
+
+with tab4:
     st.header("🗺️ Geographic Health Patterns")
     st.markdown("Compare health outcomes across different U.S. states")
     
@@ -871,10 +880,10 @@ with tab3:
                      "percentage points")
 
 # ============================================================================
-# TAB 4: TRENDS
+# TAB 5: TRENDS
 # ============================================================================
 
-with tab4:
+with tab5:
     st.header("📈 Age & Lifestyle Trends")
     st.markdown("Explore how health metrics change across different age groups")
     
